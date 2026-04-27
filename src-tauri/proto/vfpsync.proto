@@ -1,0 +1,1001 @@
+syntax = "proto3";
+package vfpsync.v1;
+
+service VfpSyncService {
+  rpc SyncDocumentos(SyncDocumentosRequest) returns (SyncResponse);
+  rpc SyncMovimientos(SyncMovimientosRequest) returns (SyncResponse);
+  rpc SyncArticulos(SyncArticulosRequest) returns (SyncResponse);
+  rpc SyncAlmacenes(SyncAlmacenesRequest) returns (SyncResponse);
+  rpc SyncUnidades(SyncUnidadesRequest) returns (SyncResponse);
+  rpc GetUnidad(GetUnidadRequest) returns (GetUnidadesResponse);
+  rpc GetUnidadesPorArticulo(GetUnidadesPorArticuloRequest) returns (GetUnidadesResponse);
+  rpc ListUnidades(ListUnidadesRequest) returns (GetUnidadesResponse);
+  rpc GetDocumento(GetDocumentoRequest) returns (GetDocumentoResponse);
+  rpc ListDocumentos(ListDocumentosRequest) returns (ListDocumentosResponse);
+  rpc GetArticulo(GetArticuloRequest) returns (GetArticuloResponse);
+  rpc GetArticuloByCodigo(GetArticuloByCodigoRequest) returns (GetArticuloResponse);
+  rpc ListArticulos(ListArticulosRequest) returns (ListArticulosResponse);
+  rpc GetAlmacen(GetAlmacenRequest) returns (GetAlmacenResponse);
+  rpc ListAlmacenes(ListAlmacenesRequest) returns (ListAlmacenesResponse);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc BuscarComprasPorArticulos(BuscarComprasRequest) returns (BuscarComprasResponse);
+  rpc BuscarRemisionesPorArticulos(BuscarRemisionesRequest) returns (BuscarRemisionesResponse);
+  rpc SyncMultialm(SyncMultialmRequest) returns (SyncResponse);
+  rpc GetInventario(GetInventarioRequest) returns (GetInventarioResponse);
+  rpc ListInventarioPorArticulo(ListInventarioPorArticuloRequest) returns (ListInventarioPorArticuloResponse);
+  rpc ListInventarioPorAlmacen(ListInventarioPorAlmacenRequest) returns (ListInventarioPorAlmacenResponse);
+  rpc SyncClientes(SyncClientesRequest) returns (SyncResponse);
+  rpc GetCliente(GetClienteRequest) returns (GetClienteResponse);
+  rpc ListClientes(ListClientesRequest) returns (ListClientesResponse);
+  rpc SyncProveedores(SyncProveedoresRequest) returns (SyncResponse);
+  rpc GetProveedor(GetProveedorRequest) returns (GetProveedorResponse);
+  rpc ListProveedores(ListProveedoresRequest) returns (ListProveedoresResponse);
+  rpc SyncMinv(SyncMinvRequest) returns (SyncResponse);
+  rpc SyncConcinv(SyncConcinvRequest) returns (SyncResponse);
+  rpc SyncConccxc(SyncConccxcRequest) returns (SyncResponse);
+  rpc SyncConccaja(SyncConccajaRequest) returns (SyncResponse);
+  rpc SyncCortes(SyncCortesRequest) returns (SyncResponse);
+  rpc SyncCaja(SyncCajaRequest) returns (SyncResponse);
+  rpc GetCorte(GetCorteRequest) returns (GetCorteResponse);
+  rpc ListCortes(ListCortesRequest) returns (ListCortesResponse);
+  rpc ListConccaja(ListConccajaRequest) returns (ListConccajaResponse);
+  rpc SyncCxc(SyncCxcRequest) returns (SyncResponse);
+  rpc GetCxc(GetCxcRequest) returns (GetCxcResponse);
+  rpc ListCxc(ListCxcRequest) returns (ListCxcResponse);
+  rpc ListMinvPorArticulo(ListMinvPorArticuloRequest) returns (ListMinvPorArticuloResponse);
+  rpc GetClienteEstadisticas(GetClienteEstadisticasRequest) returns (GetClienteEstadisticasResponse);
+  rpc GetTopArticulosPorCliente(GetTopArticulosPorClienteRequest) returns (GetTopArticulosPorClienteResponse);
+  rpc GetEstadisticasGenerales(GetEstadisticasGeneralesRequest) returns (GetEstadisticasGeneralesResponse);
+  rpc GetEstadisticasCompras(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasComprasResponse);
+  rpc GetEstadisticasVentasContado(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasVentasContadoResponse);
+  rpc GetEstadisticasVentasCredito(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasVentasCreditoResponse);
+  rpc GetEstadisticasPagosCredito(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasPagosCreditoResponse);
+  rpc GetEstadisticasInventario(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasInventarioResponse);
+  rpc GetEstadisticasVentasContadoPorTipo(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasVentasContadoPorTipoResponse);
+  rpc GetEstadisticasVentasCreditoPorTipo(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasVentasCreditoPorTipoResponse);
+}
+
+// ── Sync requests ──────────────────────────────────────────────
+message SyncDocumentosRequest {
+  repeated DocumentoRecord records = 1;
+}
+message SyncMovimientosRequest {
+  repeated MovimientoRecord records = 1;
+}
+message SyncArticulosRequest {
+  repeated ArticuloRecord records = 1;
+}
+message SyncAlmacenesRequest {
+  repeated AlmacenRecord records = 1;
+}
+message SyncMultialmRequest {
+  repeated MultialmRecord records = 1;
+}
+message SyncClientesRequest {
+  repeated ClienteRecord records = 1;
+}
+message SyncProveedoresRequest {
+  repeated ProveedorRecord records = 1;
+}
+message SyncMinvRequest {
+  repeated MinvRecord records = 1;
+}
+message SyncConcinvRequest {
+  repeated ConcinvRecord records = 1;
+}
+message SyncConccxcRequest {
+  repeated ConccxcRecord records = 1;
+}
+message SyncConccajaRequest {
+  repeated ConccajaRecord records = 1;
+}
+message SyncCortesRequest {
+  repeated CorteRecord records = 1;
+}
+message SyncCajaRequest {
+  repeated CajaRecord records = 1;
+}
+message SyncCxcRequest {
+  repeated CxcRecord records = 1;
+}
+message SyncUnidadesRequest {
+  repeated UnidadRecord records = 1;
+}
+
+// ── Sync response (compartido por los tres métodos de sync) ────
+message SyncResponse {
+  int32 processed = 1;
+  repeated SyncError errors = 2;
+}
+
+message SyncError {
+  string key = 1; // "tipodoc|numdoc" para docs, "tipodoc|numdoc|numpar" para movim, "numart" para artículos
+  string message = 2;
+}
+
+// ── Query ──────────────────────────────────────────────────────
+message GetDocumentoRequest {
+  string tipodoc = 1;
+  string numdoc = 2;
+}
+message GetDocumentoResponse {
+  DocumentoRecord documento = 1;
+  repeated MovimientoRecord movimientos = 2;
+}
+
+message ListDocumentosRequest {
+  optional string tipodoc = 1;
+  optional string fecha_from = 2; // ISO 8601 YYYY-MM-DD
+  optional string fecha_to = 3;
+  optional int32 status = 4;
+  int32 page_size = 5;
+  string page_token = 6;
+  optional string numalm = 7;
+  optional string numcli = 8;
+  optional string numprov = 9;
+  optional string formapago = 10;
+  optional string numdoc = 11; // búsqueda exacta
+  optional string fechacapt_from = 12; // ISO 8601 YYYY-MM-DD
+  optional string fechacapt_to = 13; // ISO 8601 YYYY-MM-DD
+  optional string order_by = 14; // "fechacapt_desc" (default) | "fechacapt_asc" | "id"
+}
+message ListDocumentosResponse {
+  repeated DocumentoRecord documentos = 1;
+  string next_page_token = 2;
+}
+
+// ── Artículo queries ───────────────────────────────────────────
+message GetArticuloRequest {
+  string numart = 1;
+}
+message GetArticuloByCodigoRequest {
+  string codigo = 1;
+}
+message GetArticuloResponse {
+  ArticuloRecord articulo = 1;
+}
+
+message ListArticulosRequest {
+  optional string q = 1; // busca en numart y desc
+  optional bool activo = 2;
+  int32 page_size = 3;
+  string page_token = 4; // cursor: último numart de la página anterior
+}
+message ListArticulosResponse {
+  repeated ArticuloRecord articulos = 1;
+  string next_page_token = 2;
+}
+
+// ── BuscarComprasPorArticulos ───────────────────────────────────
+message BuscarComprasRequest {
+  repeated string numarts = 1; // Lista de claves de artículos a buscar
+  string fecha_desde = 2; // ISO date "YYYY-MM-DD" (exclusive)
+  float umbral_cobertura = 3; // 0.0–1.0; si es 0.0 se usa 0.70 por defecto
+}
+
+message CompraMatchItem {
+  string tipodoc = 1;
+  string numdoc = 2;
+  string fecha = 3;
+  string numprov = 4;
+  double importe = 5;
+  int32 status = 6;
+  int32 arts_matched = 7;
+  int32 total_arts = 8;
+  float coverage_pct = 9;
+}
+
+message BuscarComprasResponse {
+  repeated CompraMatchItem items = 1;
+}
+
+// ── BuscarRemisionesPorArticulos ────────────────────────────────
+message BuscarRemisionesRequest {
+  repeated string numarts = 1; // Lista de claves de artículos a buscar
+  string fecha_desde = 2; // ISO date "YYYY-MM-DD" (exclusive)
+  float umbral_cobertura = 3; // 0.0–1.0; si es 0.0 se usa 0.70 por defecto
+  string numalm = 4; // Clave del almacén/sucursal
+}
+
+message RemisionMatchItem {
+  string tipodoc = 1;
+  string numdoc = 2;
+  string fecha = 3;
+  string numcli = 4; // cliente (no proveedor)
+  double importe = 5;
+  int32 status = 6;
+  int32 arts_matched = 7;
+  int32 total_arts = 8;
+  float coverage_pct = 9;
+}
+
+message BuscarRemisionesResponse {
+  repeated RemisionMatchItem items = 1;
+}
+
+// ── Inventario (MULTIALM) queries ──────────────────────────────
+message GetInventarioRequest {
+  string numart = 1;
+  string numalm = 2;
+}
+message GetInventarioResponse {
+  MultialmRecord record = 1;
+}
+
+message ListInventarioPorArticuloRequest {
+  string numart = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+message ListInventarioPorArticuloResponse {
+  repeated MultialmRecord records = 1;
+  string next_page_token = 2;
+}
+
+message ListInventarioPorAlmacenRequest {
+  string numalm = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+message ListInventarioPorAlmacenResponse {
+  repeated MultialmRecord records = 1;
+  string next_page_token = 2;
+}
+
+// ── Proveedor queries ──────────────────────────────────────────
+message GetProveedorRequest {
+  string numprov = 1;
+}
+message GetProveedorResponse {
+  ProveedorRecord proveedor = 1;
+}
+
+message ListProveedoresRequest {
+  optional string q = 1; // busca en numprov y nomprov
+  int32 page_size = 2;
+  string page_token = 3; // cursor: último numprov de la página anterior
+}
+message ListProveedoresResponse {
+  repeated ProveedorRecord proveedores = 1;
+  string next_page_token = 2;
+}
+
+// ── Cliente queries ────────────────────────────────────────────
+message GetClienteRequest {
+  string numcli = 1;
+}
+message GetClienteResponse {
+  ClienteRecord cliente = 1;
+}
+
+message ListClientesRequest {
+  optional string q = 1; // busca en numcli y nomcli
+  optional bool suspendido = 2;
+  optional string numvend = 3;
+  optional string numzona = 4;
+  int32 page_size = 5;
+  string page_token = 6; // cursor: último numcli de la página anterior
+  optional bool tiene_saldo = 7; // true: saldo > 0 / false: saldo = 0 o nulo
+  optional bool tiene_limcred = 8; // true: limcred > 0 / false: limcred = 0 o nulo
+}
+message ListClientesResponse {
+  repeated ClienteRecord clientes = 1;
+  string next_page_token = 2;
+}
+
+// ── Almacén queries ────────────────────────────────────────────
+message GetAlmacenRequest {
+  string numalm = 1;
+}
+message GetAlmacenResponse {
+  AlmacenRecord almacen = 1;
+}
+
+message ListAlmacenesRequest {
+  optional string q = 1; // busca en numalm y nomalm
+  int32 page_size = 2;
+  string page_token = 3; // cursor: último numalm de la página anterior
+}
+message ListAlmacenesResponse {
+  repeated AlmacenRecord almacenes = 1;
+  string next_page_token = 2;
+}
+
+// ── Health ─────────────────────────────────────────────────────
+message HealthCheckRequest {}
+message HealthCheckResponse {
+  string status = 1;
+  string version = 2;
+}
+
+// ── Records ────────────────────────────────────────────────────
+
+// DocumentoRecord: campos seleccionados de DOCUM + sync_hash + deleted_in_dbf
+// Reserved: 7=divisa, 9=tc, 17=numvend, 18=pedimento, 19=fechaped, 20=aduana,
+//           21=indirectos, 26=numuser, 33=fentrega, 34=hentrega, 35=cod,
+//           38=cantimpr, 39=numclisuc, 44=idmotivo, 46=numcliev, 47=numfact,
+//           49=numcerti, 50=esanticipo, 51=otros
+message DocumentoRecord {
+  reserved 7, 9, 17, 18, 19, 20, 21, 26, 33, 34, 35, 38, 39, 44, 46, 47, 49, 50, 51;
+  string tipodoc = 1;
+  string numdoc = 2;
+  string numalm = 3;
+  string fecha = 4; // ISO 8601 YYYY-MM-DD, vacío = null
+  string numcli = 5;
+  string numprov = 6;
+  string formapago = 8;
+  double pjedesc = 10;
+  string fechapago = 11; // ISO 8601, vacío = null
+  string refer = 12;
+  double importe = 13;
+  double descuento = 14;
+  double impuesto1 = 15;
+  double impuesto2 = 16;
+  int32 status = 22;
+  double costo = 23;
+  double costo2 = 24;
+  double costopro = 25;
+  double descuentog = 27;
+  string hora = 28;
+  bool factdiaria = 29;
+  bool fueticket = 30;
+  double retencion1 = 31;
+  double retencion2 = 32;
+  string fechacapt = 36; // ISO 8601, vacío = null
+  string corte = 37;
+  double descuento1 = 40;
+  double descuento2 = 41;
+  double descuento3 = 42;
+  double descuento4 = 43;
+  string fechacanc = 45; // ISO 8601, vacío = null
+  string uuid = 48;
+  // Campos de sincronización
+  string sync_hash = 52;
+  bool deleted_in_dbf = 53;
+}
+
+// MovimientoRecord: campos seleccionados de MOVIM + sync_hash + deleted_in_dbf
+// Reserved: 8=costopro, 22=lote
+message MovimientoRecord {
+  reserved 8, 22;
+  string tipodoc = 1;
+  string numdoc = 2;
+  string numpar = 3;
+  string numart = 4;
+  double precio = 5;
+  double costo = 6;
+  double costo2 = 7;
+  double cant = 9;
+  double pend = 10;
+  double pendocant = 11;
+  double empaque = 12;
+  double devueltos = 13;
+  double pjedesc = 14;
+  double impuesto1 = 15;
+  double impuesto2 = 16;
+  string unidad = 17;
+  string docant = 18;
+  double pjedesc2 = 19;
+  double pjedesc3 = 20;
+  double pjedesc4 = 21;
+  double pjedesc1 = 23;
+  double promoid = 24;
+  double pendcanc = 25;
+  // Campos de sincronización
+  string sync_hash = 26;
+  bool deleted_in_dbf = 27;
+}
+
+// ArticuloRecord: campos seleccionados de ARTS + sync_hash + deleted_in_dbf
+// Reserved: 5=unidefa, 13=ubica, 14=series, 18=numprov1, 19=numprov2, 20=numprov3,
+//           21=ultcomp, 22=ultcomp1, 23=ultcomp2, 24=ultcomp3, 25=ultvent,
+//           26=existencia, 27=minimo, 28=maximo, 29=reorden, 30=divisa,
+//           36=factor1, 37=factor2, 38=factor3, 39=factor4, 40=factor5,
+//           43=ultcosto2, 44=ultcosto3, 45=maxcosto, 46=costoactua, 47=costopro,
+//           48=ventano, 49=ventanoqty, 51=ultmaxcost, 52=ultactcost,
+//           53=compano, 54=companoqty, 55=repyy, 56=cant_defa, 59=preciof,
+//           61=fechamod, 62=usacaduc, 63=usalotes, 64=ventacorte, 65=eskit,
+//           66=uid, 67=pjedesc, 68=oferta, 69=insumo, 70=peso, 71=largo,
+//           72=ancho, 73=altura, 74=cantxcj, 75=foto, 76=idmarca,
+//           77=preciov2, 78=preciov3, 79=preciov4, 80=preciov5,
+//           81=ppubv2, 82=ppubv3, 83=ppubv4, 84=ppubv5,
+//           85=vol2, 86=vol3, 87=vol4, 88=vol5, 89=statusweb,
+//           91=implocal, 92=fracaranc, 93=matpelig, 94=embalaje,
+//           95=guiaid, 96=guiaiddesc, 97=esmatpelig,
+//           98=factorv2, 99=factorv3, 100=factorv4, 101=factorv5, 102=fraccok
+message ArticuloRecord {
+  reserved 5, 13, 14, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 36, 37, 38, 39, 40, 43, 44, 45, 46, 47, 48, 49, 51, 52, 53, 54, 55, 56, 59, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102;
+  string numart = 1;
+  string desc = 2;
+  string codigo = 3;
+  string unidad = 4;
+  string marca = 6;
+  string modelo = 7;
+  string linea = 8;
+  string familia = 9;
+  string categoria = 10;
+  string numdep = 11;
+  string valdep = 12;
+  double impuesto1 = 15;
+  double impuesto2 = 16;
+  string numprov = 17;
+  double precio1 = 31;
+  double precio2 = 32;
+  double precio3 = 33;
+  double precio4 = 34;
+  double precio5 = 35;
+  double ultcosto = 41;
+  double ultcosto1 = 42;
+  bool activo = 50;
+  bool excento = 57;
+  double preciopub = 58;
+  bool servicio = 60;
+  string clavesat = 90;
+  // Campos de sincronización
+  string sync_hash = 103;
+  bool deleted_in_dbf = 104;
+}
+
+// MultialmRecord: campos de MULTIALM.DBF + sync_hash + deleted_in_dbf
+message MultialmRecord {
+  string numart = 1; // C:20 - clave artículo
+  string numalm = 2; // C:2  - clave almacén
+  double existencia = 3; // N:10.3
+  double maximo = 4; // N:10.3
+  double minimo = 5; // N:10.3
+  double reorden = 6; // N:10.3
+  string ubica = 7; // C:10 - ubicación física
+  // Campos de sincronización
+  string sync_hash = 8;
+  bool deleted_in_dbf = 9;
+}
+
+// ProveedorRecord: campos de PROVEDOR.DBF + sync_hash + deleted_in_dbf
+// Fields 32 and 33 reserved for cuentaban and claveban (excluded from sync)
+message ProveedorRecord {
+  reserved 32, 33;
+  string numprov = 1; // C:5  - clave primaria
+  string nomprov = 2; // C:50
+  string calle = 3; // C:30
+  string numext = 4; // C:10
+  string colonia = 5; // C:20
+  string ciudad = 6; // C:30
+  string estado = 7; // C:20
+  string cp = 8; // C:6
+  string telefono = 9; // C:50
+  string fax = 10; // C:50
+  string clasif = 11; // C:5
+  double compano = 12; // N:12.2
+  string ultcomp = 13; // D:8  ISO 8601 YYYY-MM-DD, vacío = null
+  string contacto = 14; // C:40
+  string rfc = 15; // C:13
+  double pjedesc = 16; // N:6.2
+  double saldo = 17; // N:12.2
+  int32 diascred = 18; // N:3.0
+  string numcta = 19; // C:20
+  int32 tproviva = 20; // N:2.0
+  string diotpais = 21; // C:2
+  string diotnal = 22; // C:25
+  string diottaxid = 23; // C:25
+  string email = 24; // C:40
+  string email2 = 25; // C:40
+  string email3 = 26; // C:40
+  string contacto2 = 27; // C:40
+  string contacto3 = 28; // C:40
+  string telefono2 = 29; // C:50
+  string telefono3 = 30; // C:50
+  string banco = 31; // C:30
+  int32 idregla = 34; // N:5.0
+  double impuesto1 = 35; // N:6.2
+  string idregimen = 36; // C:3
+  // Campos de sincronización
+  string sync_hash = 39;
+  bool deleted_in_dbf = 40;
+}
+
+// ClienteRecord: campos de CLIENTES.DBF + sync_hash + deleted_in_dbf
+// Field 41 reserved for claveweb (excluded from sync)
+message ClienteRecord {
+  reserved 41;
+  string numcli = 1; // C:5  - clave primaria
+  string nomcli = 2; // C:150
+  string calle = 3; // C:60
+  string numext = 4; // C:10
+  string colonia = 5; // C:20
+  string ciudad = 6; // C:30
+  string estado = 7; // C:20
+  string cp = 8; // C:6
+  string telefono = 9; // C:30
+  string fax = 10; // C:20
+  string clasif = 11; // C:5
+  double ventano = 12; // N:12.2
+  string ultvent = 13; // D:8  ISO 8601 YYYY-MM-DD, vacío = null
+  string atvent = 14; // C:40
+  string atcobr = 15; // C:40
+  string email1 = 16; // C:40
+  string email2 = 17; // C:40
+  string rfc = 18; // C:13
+  double limcred = 19; // N:12.2
+  double saldo = 20; // N:12.2
+  double pjedesc = 21; // N:5.2
+  int32 diascred = 22; // N:3.0
+  string precioutil = 23; // C:1
+  string recepfac = 24; // C:30
+  string pagofac = 25; // C:30
+  string numcta = 26; // C:20
+  int64 uid = 27; // N:10.0
+  string numvend = 28; // C:5
+  bool obligareq = 29; // L:1
+  bool suspendido = 30; // L:1
+  double impuesto1 = 31; // N:6.2
+  double retencion1 = 32; // N:10.4
+  double retencion2 = 33; // N:6.2
+  bool permitecod = 34; // L:1
+  bool llavecred = 35; // L:1
+  string pais = 36; // C:15
+  string clavecli = 37; // C:20
+  string curp = 38; // C:20
+  string nomcomer = 39; // C:40
+  int32 statusweb = 40; // N:1.0
+  string numzona = 42; // C:5
+  string metodousar = 43; // C:2
+  string numint = 44; // C:10
+  string usocfdi = 45; // C:3
+  string formapago = 46; // C:2
+  string condpago = 47; // C:30
+  string emailtw = 48; // C:50
+  string numidtrib = 49; // C:40
+  string idregimen = 50; // C:3
+  // Campos de sincronización
+  string sync_hash = 51;
+  bool deleted_in_dbf = 52;
+}
+
+// MinvRecord: campos de MINV.DBF — kardex de entradas y salidas de inventario
+// PK: tipodoc + numdoc + numpar (igual que MOVIMIENTOS)
+// cant es con signo: positivo = entrada, negativo = salida
+message MinvRecord {
+  string tipodoc = 1; // C:2  — PK parte 1
+  string numdoc = 2; // C:10 — PK parte 2
+  string numpar = 3; // C:3  — PK parte 3
+  string numart = 4; // C:20
+  string fecha = 5; // D:8  ISO 8601 YYYY-MM-DD, vacío = null
+  string numalm = 6; // C:2
+  double cant = 7; // N:12.3 — con signo: positivo=entrada, negativo=salida
+  double disp = 8; // N:12.3
+  double precio = 9; // N:13.5
+  double costo = 10; // N:13.5
+  double costodls = 11; // N:13.5
+  double costo2 = 12; // N:13.5
+  double costopro = 13; // N:13.5
+  string numprov = 14; // C:5
+  string numcli = 15; // C:5
+  string numuser = 16; // C:5
+  string caducidad = 17; // D:8  ISO 8601 YYYY-MM-DD, vacío = null
+  string lote = 18; // C:20
+  string refer = 19; // C:10
+  double cantimpr = 20; // N:3.0
+  string idmotivo = 21; // C:3
+  string fechahora = 22; // C:14 — raw "YYYYMMDDHHMMSS"
+  // Campos de sincronización
+  string sync_hash = 23;
+  bool deleted_in_dbf = 24;
+}
+
+// ConcinvRecord: conceptos de inventario — catálogo de tipodoc para MINV
+// PK: conc (C:2) — mismo código que tipodoc en MINV
+message ConcinvRecord {
+  string conc = 1; // C:2  — PK (mismo que tipodoc en MINV)
+  string desc = 2; // C:30 — descripción del concepto
+  string es = 3; // C:1
+  string cop = 4; // C:1
+  string formato = 5; // C:8
+  string niveles = 6; // C:30
+  string conccanc = 7; // C:2  — concepto de cancelación relacionado
+  string sigfolio = 8; // C:10
+  // Campos de sincronización
+  string sync_hash = 9;
+  bool deleted_in_dbf = 10;
+}
+
+// ConccxcRecord: catálogo de conceptos de CXC (ConCxc.DBF)
+// PK: conc (C:2)
+message ConccxcRecord {
+  string conc = 1; // C:2  — PK
+  string desc = 2; // C:20
+  string ca = 3; // C:1  "1"=cargo, "0"=abono
+  bool obligaref = 4; // L:1
+  bool editar = 5; // L:1
+  string reporte = 6; // C:60
+  string sigfolio = 7; // C:10
+  bool repetido = 8; // L:1
+  string clavesat = 9; // C:2
+  bool obligfolio = 10; // L:1
+  // Campos de sincronización
+  string sync_hash = 11;
+  bool deleted_in_dbf = 12;
+}
+
+// CxcRecord: cuentas por cobrar (Cxc.DBF)
+// PK: keycxc (C:12)
+message CxcRecord {
+  string keycxc = 1; // C:12 — PK
+  string numcli = 2; // C:5
+  string conc = 3; // C:2  → conccxc.conc
+  string numdoc = 4; // C:10
+  string refer = 5; // C:12
+  string fecha = 6; // D:8  ISO 8601, vacío = null
+  string venc = 7; // D:8  ISO 8601, vacío = null
+  double importe = 8; // N:12.2
+  double tc = 9; // N:8.4
+  string divisa = 10; // C:1
+  double saldo = 11; // N:12.2
+  string ca = 12; // C:1  "1"=cargo, "0"=abono
+  bool entregada = 13; // L:1
+  bool obligaref = 14; // L:1
+  int64 recno = 15; // N:8.0
+  string numuser = 16; // C:5
+  string numalm = 17; // C:2
+  string keyrefer = 18; // C:12
+  string keyrefer2 = 19; // C:12
+  string keydocum = 20; // C:12
+  string keycaja = 21; // C:12
+  string fechahora = 22; // C:14 raw "YYYYMMDDHHMMSS"
+  string cvecuenta = 23; // C:2
+  string idctaorig = 24; // C:9
+  string idspei = 25; // C:9
+  string pagodigrel = 26; // C:10
+  // Campos de sincronización
+  string sync_hash = 27;
+  bool deleted_in_dbf = 28;
+}
+
+// GetCxcRequest / GetCxcResponse
+message GetCxcRequest {
+  string keycxc = 1;
+}
+message GetCxcResponse {
+  CxcRecord record = 1;
+}
+
+// ListCxcRequest / ListCxcResponse
+message ListCxcRequest {
+  string numcli = 1; // filtro opcional por cliente
+  string numalm = 2; // filtro opcional por almacén
+  string keycxc = 3; // filtro opcional por keycxc exacto
+  string fecha_desde = 4; // ISO 8601 fecha inicio
+  string fecha_hasta = 5; // ISO 8601 fecha fin
+  bool only_with_saldo = 6; // solo registros con saldo != 0
+  string page_token = 7; // cursor de paginación (último keycxc visto)
+  int32 page_size = 8;
+  string sort_dir = 9; // "desc" = más recientes primero (default), "asc" = más antiguos primero
+}
+message ListCxcResponse {
+  repeated CxcRecord records = 1;
+  string next_page_token = 2;
+}
+
+// AlmacenRecord: campos de ALMACEN.DBF + sync_hash + deleted_in_dbf
+// ── ListMinvPorArticulo ────────────────────────────────────────────────────────
+message ListMinvPorArticuloRequest {
+  string numart = 1; // requerido — clave del artículo
+  optional string numalm = 2; // filtro por almacén; vacío = todos
+  optional string fecha_from = 3; // ISO 8601 YYYY-MM-DD, inclusivo
+  optional string fecha_to = 4; // ISO 8601 YYYY-MM-DD, inclusivo
+  optional string tipodoc = 5; // filtro por tipo de documento
+  int32 page_size = 6; // default 50, max 200
+  string page_token = 7; // cursor opaco; vacío = primera página
+  optional string sort_dir = 8; // "asc" | "desc" (default)
+}
+
+message ListMinvPorArticuloResponse {
+  repeated MinvRecord records = 1;
+  string next_page_token = 2;
+}
+
+// ── GetClienteEstadisticas ────────────────────────────────────────────────────
+message GetClienteEstadisticasRequest {
+  string numcli = 1; // C:5 — requerido
+  string mes_desde = 2; // YYYY-MM — default: mes_hasta - 5 meses (6 meses total)
+  string mes_hasta = 3; // YYYY-MM — default: mes actual del servidor
+}
+
+message ClienteMesStats {
+  string mes = 1; // YYYY-MM
+  int32 ventas_count = 2;
+  double ventas_total = 3;
+  double ventas_contado = 4;
+  double ventas_credito = 5;
+  double cargos_cxc = 6; // SUM(importe) WHERE ca='0'
+  double abonos_cxc = 7; // SUM(importe) WHERE ca='1'
+  double saldo_inicio = 8;
+  double saldo_fin = 9;
+}
+
+message GetClienteEstadisticasResponse {
+  repeated ClienteMesStats meses = 1; // ordenados de más antiguo a más reciente
+}
+
+// ── GetTopArticulosPorCliente ──────────────────────────────────────────────
+message GetTopArticulosPorClienteRequest {
+  string numcli = 1; // requerido
+  repeated string tipodocs = 2; // e.g. ["FA","RE","VT"]
+  int32 top_n = 3; // default 10, max 50
+}
+
+message TopArticuloClienteItem {
+  string numart = 1;
+  string desc = 2;
+  double total_cant = 3;
+  int32 num_documentos = 4;
+}
+
+message GetTopArticulosPorClienteResponse {
+  repeated TopArticuloClienteItem items = 1;
+}
+
+message AlmacenRecord {
+  string numalm = 1; // C:2  - clave primaria
+  string nomalm = 2; // C:30 - nombre del almacén
+  string niveles = 3; // C:50
+  string ultid = 4; // C:14
+  string ultss = 5; // C:10
+  bool salxcapa = 6; // L:1
+  bool obligacad = 7; // L:1
+  bool obligalot = 8; // L:1
+  string numalmprim = 9; // C:2  - almacén padre (referencia blanda)
+  string calle = 10; // C:50
+  string numext = 11; // C:15
+  string colonia = 12; // C:30
+  string ciudad = 13; // C:50
+  string estado = 14; // C:50
+  string cp = 15; // C:50
+  // Campos de sincronización
+  string sync_hash = 16;
+  bool deleted_in_dbf = 17;
+}
+
+// UnidadRecord: unidades alternativas de venta por artículo (Unidades.DBF)
+// PK: numart + unidad (composite)
+// Equivalencia = equiv2 / equiv1
+message UnidadRecord {
+  string numart = 1; // C:20 — PK parte 1, referencia blanda a articulos.numart
+  string unidad = 2; // C:5  — PK parte 2, código de unidad alternativa
+  double equiv1 = 3; // N:10.3 — denominador de la equivalencia
+  double equiv2 = 4; // N:10.3 — numerador de la equivalencia
+  double precio1 = 5; // N:13.5
+  double precio2 = 6; // N:13.5
+  double precio3 = 7; // N:13.5
+  double precio4 = 8; // N:13.5
+  double precio5 = 9; // N:13.5
+  double preciopub = 10; // N:10.2
+  // Campos de sincronización
+  string sync_hash = 11;
+  bool deleted_in_dbf = 12;
+}
+
+// ── Unidades queries ───────────────────────────────────────────────────────────
+message GetUnidadRequest {
+  string numart = 1;
+  string unidad = 2;
+}
+
+message GetUnidadesPorArticuloRequest {
+  string numart = 1;
+}
+
+message ListUnidadesRequest {
+  optional string numart = 1; // filtro por numart exacto o prefijo
+  int32 page_size = 2;
+  string page_token = 3; // cursor: último "numart|unidad" visto
+}
+
+message GetUnidadesResponse {
+  repeated UnidadRecord records = 1;
+  string next_page_token = 2; // vacío si no hay más páginas
+}
+
+// ── GetEstadisticasGenerales ──────────────────────────────────────────────────
+message GetEstadisticasGeneralesRequest {}
+
+message GetEstadisticasGeneralesResponse {
+  int64 num_articulos = 1; // artículos activos (deleted_in_dbf = false)
+  int64 num_clientes = 2; // clientes activos (deleted_in_dbf = false)
+  int64 num_proveedores = 3; // proveedores activos (deleted_in_dbf = false)
+  int64 num_fracciones = 4; // unidades alternativas activas (deleted_in_dbf = false)
+  int64 num_cuentas_x_cobrar = 5; // CXC con saldo != 0
+  int64 num_sucursales = 6; // almacenes activos (deleted_in_dbf = false)
+}
+
+// ── Cortes queries ────────────────────────────────────────────────────────────
+
+message GetCorteRequest {
+  string corte = 1; // C:7 — PK requerida
+}
+
+message GetCorteResponse {
+  CorteRecord corte = 1;
+  repeated CajaRecord partidas = 2; // movimientos del corte
+}
+
+message ListCortesRequest {
+  optional string numalm = 1; // filtro por almacén exacto
+  optional string fecha_from = 2; // ISO 8601 YYYY-MM-DD, inclusivo
+  optional string fecha_to = 3; // ISO 8601 YYYY-MM-DD, inclusivo
+  optional string corte = 4; // folio exacto (C:7)
+  optional string estado = 5; // "abierto" (sin fechafin) | "cerrado" (con fechafin)
+  int32 page_size = 6; // default 50
+  string page_token = 7; // cursor: último corte visto
+  optional string sort_dir = 8; // "desc" = más recientes primero (default) | "asc"
+  bool complete_days = 9; // Si true, extiende la página para no partir un día entre páginas
+}
+
+message ListCortesResponse {
+  repeated CorteRecord cortes = 1;
+  string next_page_token = 2;
+}
+
+message ListConccajaRequest {} // sin filtros — catálogo completo
+
+message ListConccajaResponse {
+  repeated ConccajaRecord records = 1;
+}
+
+// ConccajaRecord: catálogo de conceptos de caja (ConcCaja.DBF)
+// PK: tipodoc (C:5)
+message ConccajaRecord {
+  string tipodoc = 1; // C:5 — PK
+  string desc = 2; // C:40
+  string conccxc = 3; // C:2  — referencia blanda a conccxc.conc
+  string tipomov = 4; // C:1
+  bool pidebenef = 5; // L:1
+  string grupos = 6; // C:50
+  bool esmovefvo = 7; // L:1
+  bool piderefer = 8; // L:1
+  double pjecom = 9; // N:10.5
+  bool mostrtot = 10; // L:1
+  bool usaauto = 11; // L:1
+  string gposauto = 12; // C:50
+  string clavesat = 13; // C:2
+  bool planpagos = 14; // L:1
+  bool obligarref = 15; // L:1
+  double provpago = 16; // N:1.0
+  // Campos de sincronización
+  string sync_hash = 17;
+  bool deleted_in_dbf = 18;
+}
+
+// CorteRecord: cortes de caja (cortes2.dbf)
+// PK: corte (C:7)
+message CorteRecord {
+  string corte = 1; // C:7 — PK
+  string numalm = 2; // C:2
+  string numuser = 3; // C:5
+  string fecha = 4; // D:8  ISO 8601, vacío = null
+  string hora = 5; // C:8
+  string numest = 6; // C:2
+  string numuserfin = 7; // C:5
+  string fechafin = 8; // D:8  ISO 8601, vacío = null
+  string horafin = 9; // C:8
+  string numusercc = 10; // C:5
+  string fechacc = 11; // D:8  ISO 8601, vacío = null
+  string horacc = 12; // C:8
+  int32 numop = 13; // N:5.0
+  double entpagos = 14; // N:12.2
+  double salcorte = 15; // N:12.2
+  double entotrmov = 16; // N:12.2
+  double salotrmov = 17; // N:12.2
+  double efectivo = 18; // N:12.2
+  double tc = 19; // N:8.4
+  int32 cantimpr = 20; // N:2.0
+  bool modificado = 21; // L:1
+  // Campos de sincronización
+  string sync_hash = 22;
+  bool deleted_in_dbf = 23;
+}
+
+// CajaRecord: partidas de corte de caja (caja.dbf)
+// PK: corte + tipodoc + numdoc
+message CajaRecord {
+  string corte = 1; // C:7  — PK parte 1
+  string numdoc = 2; // C:5  — PK parte 2
+  string tipodoc = 3; // C:5  — PK parte 3, referencia blanda a conccaja.tipodoc
+  string tipomov = 4; // C:1
+  string es = 5; // C:1
+  string numuser = 6; // C:5
+  string numalm = 7; // C:2
+  string fecha = 8; // D:8  ISO 8601, vacío = null
+  string hora = 9; // C:8
+  string numcli = 10; // C:5
+  string numbenef = 11; // C:6
+  double importe = 12; // N:12.2
+  double pago = 13; // N:12.2
+  string divisa = 14; // C:1
+  double tc = 15; // N:8.4
+  bool cancelado = 16; // L:1
+  string keydocum = 17; // C:12
+  string refer = 18; // C:20
+  string desc = 21; // descripcion de conccaja (join por tipodoc)
+  // Campos de sincronización
+  string sync_hash = 19;
+  bool deleted_in_dbf = 20;
+}
+
+// ── Estadísticas trimestrales ─────────────────────────────────────────────────
+
+message GetEstadisticasTrimestralesRequest {
+  optional string numalm = 1; // vacío = todos los almacenes
+}
+
+message EstadisticaAlmacenItem {
+  string numalm = 1;
+  string nomalm = 2;
+  double importe = 3;
+}
+
+message EstadisticasTrimestreItem {
+  string trimestre = 1; // "YYYY-QN" ej: "2025-Q4"
+  string fecha_inicio = 2; // ISO 8601 YYYY-MM-DD
+  string fecha_fin = 3; // ISO 8601 YYYY-MM-DD
+  bool es_actual = 4; // true si es el trimestre en curso
+  repeated EstadisticaAlmacenItem almacenes = 5;
+}
+
+message GetEstadisticasComprasResponse {
+  repeated EstadisticasTrimestreItem trimestres = 1;
+}
+
+message GetEstadisticasVentasContadoResponse {
+  repeated EstadisticasTrimestreItem trimestres = 1;
+}
+
+message GetEstadisticasVentasCreditoResponse {
+  repeated EstadisticasTrimestreItem trimestres = 1;
+}
+
+message GetEstadisticasPagosCreditoResponse {
+  repeated EstadisticasTrimestreItem trimestres = 1;
+}
+
+message EstadisticaInventarioAlmacenItem {
+  string numalm = 1;
+  string nomalm = 2;
+  double saldo_inicial = 3; // SUM(cant*costo) acumulado antes del trimestre
+  double movimiento = 4; // SUM(cant*costo) dentro del trimestre
+  double saldo_final = 5; // saldo_inicial + movimiento
+}
+
+message EstadisticasInventarioTrimestreItem {
+  string trimestre = 1; // "YYYY-QN"
+  string fecha_inicio = 2; // ISO 8601 YYYY-MM-DD
+  string fecha_fin = 3; // ISO 8601 YYYY-MM-DD
+  bool es_actual = 4;
+  repeated EstadisticaInventarioAlmacenItem almacenes = 5;
+}
+
+message GetEstadisticasInventarioResponse {
+  repeated EstadisticasInventarioTrimestreItem trimestres = 1;
+}
+
+// ── Ventas por tipo de documento ──────────────────────────────────────────────
+
+message EstadisticaVentasTipoDocItem {
+  string tipodoc = 1; // "R", "N" o "F"
+  repeated EstadisticaAlmacenItem almacenes = 2;
+}
+
+message EstadisticasVentasPorTipoTrimestreItem {
+  string trimestre = 1; // "YYYY-QN"
+  string fecha_inicio = 2;
+  string fecha_fin = 3;
+  bool es_actual = 4;
+  repeated EstadisticaVentasTipoDocItem tipos = 5;
+}
+
+message GetEstadisticasVentasContadoPorTipoResponse {
+  repeated EstadisticasVentasPorTipoTrimestreItem trimestres = 1;
+}
+
+message GetEstadisticasVentasCreditoPorTipoResponse {
+  repeated EstadisticasVentasPorTipoTrimestreItem trimestres = 1;
+}

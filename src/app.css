@@ -1,0 +1,97 @@
+@import 'tailwindcss';
+
+@theme {
+	/* ── Colores ──────────────────────────────────────── */
+	--color-navy: #1e3a5f;
+	--color-navy-dark: #142844;
+	--color-navy-light: #2a5080;
+	--color-amber: #e8820a;
+	--color-green: #1f9254;
+	--color-green-bg: #edfaf3;
+	--color-surface: #ffffff;
+	--color-bg: #eef1f6;
+
+	/* ── Tipografía ───────────────────────────────────── */
+	--font-barlow: 'Barlow', sans-serif;
+	--font-barlow-condensed: 'Barlow Condensed', sans-serif;
+	--font-mono: 'JetBrains Mono', monospace;
+
+	/* ── Radios ───────────────────────────────────────── */
+	--radius-card: 12px;
+	--radius-card-sm: 10px;
+
+	/* ── Sombras ──────────────────────────────────────── */
+	--shadow-card: 0 2px 8px rgba(30, 58, 95, 0.1);
+	--shadow-card-md: 0 4px 16px rgba(30, 58, 95, 0.14);
+
+	/* ── Animaciones → clases animate-* ──────────────── */
+	--animate-orb-pulse: orb-pulse 2.2s ease-in-out infinite;
+	--animate-fadeSlide: fadeSlide 0.28s ease both;
+	--animate-fadeSlide-fast: fadeSlide 0.2s ease both;
+	--animate-fadeDown: fadeDown 0.3s ease both;
+	--animate-shimmer: shimmer 1.4s ease infinite;
+	--animate-pulse-dot: pulse 1s ease infinite;
+	--animate-spin-fast: spin 0.7s linear infinite;
+}
+
+/* ── Keyframes ────────────────────────────────────────── */
+@keyframes orb-pulse {
+	0%,
+	100% {
+		transform: scale(1);
+		opacity: 0.35;
+	}
+	50% {
+		transform: scale(1.6);
+		opacity: 0;
+	}
+}
+
+@keyframes fadeSlide {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes fadeDown {
+	from {
+		opacity: 0;
+		transform: translateY(-5px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes shimmer {
+	0% {
+		background-position: 200% 0;
+	}
+	100% {
+		background-position: -200% 0;
+	}
+}
+
+@keyframes pulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.5;
+		transform: scale(0.7);
+	}
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}

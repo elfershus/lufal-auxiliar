@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(rustup target:*)",
+      "Bash(rustup show:*)",
+      "Bash(cargo xwin:*)",
+      "Read(//home/fernando/**)",
+      "Bash(cargo --version)",
+      "Bash(npm --version)",
+      "Bash(cmd.exe /c \"cl.exe 2>&1\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(cmd.exe /c \"where cl.exe 2>&1\")",
+      "Bash(cmd.exe /c 'reg query \"HKLM\\\\SOFTWARE\\\\WOW6432Node\\\\Microsoft\\\\EdgeUpdate\\\\Clients\\\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}\" /v pv 2>&1')",
+      "Bash(cmd.exe:*)",
+      "Bash(winget --version)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(echo \"node exit: $?\")",
+      "Bash(echo \"npm exit: $?\")",
+      "Bash(cl)",
+      "Bash(echo \"cl exit: $?\")",
+      "Bash(reg query:*)",
+      "Bash(winget install:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(npm install:*)",
+      "Bash(cargo build:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(bash:*)",
+      "Bash(ls:*)",
+      "Bash(/c/Users/fernando/Desktop/lufal-ordenes-tauri/src-tauri/target/debug/lufal-ordenes-tauri.exe)",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(grpcurl -H 'x-api-key: 1d4da289807366d17645a283281ff91391652b8089e2f0599a382931283bf185' -import-path /c/Users/fernando/Desktop/lufal-ordenes-tauri/src-tauri/proto -proto vfpsync.proto -d '{\"tipodoc\":\"O\",\"numdoc\":\"B425\"}' central.pinturaslufal.com:443 vfpsync.v1.VfpSyncService/GetDocumento)",
+      "Bash(grpcurl -H 'x-api-key: 1d4da289807366d17645a283281ff91391652b8089e2f0599a382931283bf185' -import-path /c/Users/fernando/Desktop/lufal-ordenes-tauri/src-tauri/proto -proto vfpsync.proto -d '{\"tipodoc\":\"R\",\"numdoc\":\"A27050\"}' central.pinturaslufal.com:443 vfpsync.v1.VfpSyncService/GetDocumento)",
+      "Bash(python3 -c ':*)",
+      "Bash(npx tauri *)",
+      "Bash(python -c ' *)",
+      "Bash(cargo check *)",
+      "Bash(npx tsc *)",
+      "Bash(xargs wc *)"
+    ]
+  }
+}
