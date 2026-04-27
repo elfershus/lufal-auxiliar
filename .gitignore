@@ -8,6 +8,11 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 
+# Claves de firma (nunca subir al repo)
+*.key
+*.key.pub
+%USERPROFILE%/
+
 # Editor
 .vscode/settings.json
 .idea/
