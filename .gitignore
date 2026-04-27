@@ -13,6 +13,9 @@ src-tauri/gen/
 *.key.pub
 %USERPROFILE%/
 
+# Release (generado por scripts/release.ps1)
+latest.json
+
 # Editor
 .vscode/settings.json
 .idea/
