@@ -3,10 +3,10 @@ use rusqlite::Connection;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::types::Etiqueta;
+use crate::types::{Etiqueta, PairingRow, SeguimientoFraccionRow};
 
 pub fn db_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|d| d.join("lufal-ordenes").join("pairings.db"))
+    dirs::config_dir().map(|d| d.join("lufal-auxiliar-desktop").join("pairings.db"))
 }
 
 pub fn init_db() -> Result<Connection> {
@@ -42,6 +42,12 @@ pub fn init_db() -> Result<Connection> {
              etiqueta_id     INTEGER NOT NULL,
              PRIMARY KEY (numart_origen, unidad_fraccion, etiqueta_id),
              FOREIGN KEY (etiqueta_id) REFERENCES etiquetas(id) ON DELETE CASCADE
+         );
+
+         CREATE TABLE IF NOT EXISTS seguimientos (
+             numart_origen   TEXT NOT NULL,
+             unidad_fraccion TEXT NOT NULL,
+             PRIMARY KEY (numart_origen, unidad_fraccion)
          );",
     )
     .context("No se pudo inicializar la base de datos")?;
@@ -155,6 +161,99 @@ pub fn set_pairing_etiquetas(
         )?;
     }
     Ok(())
+}
+
+pub fn get_all_pairings_vec() -> Result<Vec<PairingRow>> {
+    let conn = init_db()?;
+    let mut stmt = conn.prepare(
+        "SELECT numart_origen, unidad_fraccion, numart_destino
+         FROM fraccion_pairings ORDER BY numart_origen, unidad_fraccion",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(PairingRow {
+            numart_origen:   row.get(0)?,
+            unidad_fraccion: row.get(1)?,
+            numart_destino:  row.get(2)?,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(anyhow::Error::from)
+}
+
+pub fn import_pairings(rows: &[PairingRow], mode: &str) -> Result<usize> {
+    let mut conn = init_db()?;
+    let tx = conn.transaction()?;
+    if mode == "reemplazar" {
+        tx.execute("DELETE FROM emparejamiento_etiquetas", [])?;
+        tx.execute("DELETE FROM fraccion_pairings", [])?;
+    }
+    let mut count = 0usize;
+    for r in rows {
+        let affected = tx.execute(
+            "INSERT INTO fraccion_pairings (numart_origen, unidad_fraccion, numart_destino)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(numart_origen, unidad_fraccion) DO NOTHING",
+            rusqlite::params![r.numart_origen, r.unidad_fraccion, r.numart_destino],
+        )?;
+        count += affected;
+    }
+    tx.commit()?;
+    Ok(count)
+}
+
+// ── Seguimientos CRUD ──────────────────────────────────────────────────────
+
+pub fn add_seguimiento(numart_origen: &str, unidad_fraccion: &str) -> Result<()> {
+    let conn = init_db()?;
+    conn.execute(
+        "INSERT INTO seguimientos (numart_origen, unidad_fraccion)
+         VALUES (?1, ?2)
+         ON CONFLICT DO NOTHING",
+        rusqlite::params![numart_origen, unidad_fraccion],
+    )?;
+    Ok(())
+}
+
+pub fn delete_seguimiento(numart_origen: &str, unidad_fraccion: &str) -> Result<()> {
+    let conn = init_db()?;
+    conn.execute(
+        "DELETE FROM seguimientos WHERE numart_origen = ?1 AND unidad_fraccion = ?2",
+        rusqlite::params![numart_origen, unidad_fraccion],
+    )?;
+    Ok(())
+}
+
+pub fn get_all_seguimientos() -> Result<Vec<SeguimientoFraccionRow>> {
+    let conn = init_db()?;
+    let mut stmt = conn.prepare(
+        "SELECT numart_origen, unidad_fraccion FROM seguimientos ORDER BY numart_origen, unidad_fraccion",
+    )?;
+    let rows = stmt.query_map([], |row| {
+        Ok(SeguimientoFraccionRow {
+            numart_origen:   row.get(0)?,
+            unidad_fraccion: row.get(1)?,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<Vec<_>>>().map_err(anyhow::Error::from)
+}
+
+pub fn import_seguimientos(rows: &[SeguimientoFraccionRow], mode: &str) -> Result<usize> {
+    let mut conn = init_db()?;
+    let tx = conn.transaction()?;
+    if mode == "reemplazar" {
+        tx.execute("DELETE FROM seguimientos", [])?;
+    }
+    let mut count = 0usize;
+    for r in rows {
+        let affected = tx.execute(
+            "INSERT INTO seguimientos (numart_origen, unidad_fraccion)
+             VALUES (?1, ?2)
+             ON CONFLICT DO NOTHING",
+            rusqlite::params![r.numart_origen, r.unidad_fraccion],
+        )?;
+        count += affected;
+    }
+    tx.commit()?;
+    Ok(count)
 }
 
 pub fn get_all_pairing_etiquetas() -> Result<HashMap<(String, String), Vec<Etiqueta>>> {

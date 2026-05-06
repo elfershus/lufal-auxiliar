@@ -136,10 +136,70 @@ export interface ArticuloFracciones {
 	numart: string;
 	desc: string;
 	unidad_base: string;
+	precio1: number;
+	precio2: number;
+	precio3: number;
+	precio4: number;
+	precio5: number;
 	fracciones: FraccionRecord[];
 }
 
 export interface DbfPaths {
 	dbf_arts: string | null;
 	dbf_unidades: string | null;
+}
+
+export interface PairingRow {
+	numart_origen: string;
+	unidad_fraccion: string;
+	numart_destino: string;
+}
+
+export interface PairingRowPreview {
+	row_index: number;
+	numart_origen: string;
+	unidad_fraccion: string;
+	numart_destino: string;
+	errors: string[];
+}
+
+export interface ParsePairingsResult {
+	rows: PairingRowPreview[];
+	total_rows: number;
+	valid_count: number;
+	error_count: number;
+}
+
+export interface SeguimientoFraccionRow {
+	numart_origen: string;
+	unidad_fraccion: string;
+}
+
+export interface SeguimientoFraccionPreview {
+	row_index: number;
+	numart_origen: string;
+	unidad_fraccion: string;
+	errors: string[];
+}
+
+export interface ParseSeguimientosResult {
+	rows: SeguimientoFraccionPreview[];
+	total_rows: number;
+	valid_count: number;
+	error_count: number;
+}
+
+export interface VerifNivel {
+	nivel: number;
+	precioActual: number;
+	precioMinimo: number;
+	diferencia: number;
+	desactualizado: boolean;
+}
+
+export interface VerifFraccion {
+	factor: number;
+	niveles: VerifNivel[];
+	hayProblema: boolean;
+	nivelesConProblema: number[];
 }

@@ -4,6 +4,7 @@ mod dbf_reader;
 mod grpc;
 mod models;
 mod types;
+mod xlsx;
 
 use config::AppConfig;
 use grpc::GrpcClient;
@@ -156,6 +157,7 @@ struct FraccionesInitData {
     fracciones: Vec<ArticuloFracciones>,
     articulos: Vec<ArticuloSearchResult>,
     etiquetas: Vec<Etiqueta>,
+    seguimientos: Vec<SeguimientoFraccionRow>,
 }
 
 #[tauri::command]
@@ -238,6 +240,11 @@ fn get_fracciones_init_data() -> Result<FraccionesInitData, String> {
                 numart: numart.clone(),
                 desc: art.map(|a| a.desc.clone()).unwrap_or_default(),
                 unidad_base: art.map(|a| a.unidad.clone()).unwrap_or_default(),
+                precio1: art.map(|a| a.precio1).unwrap_or(0.0),
+                precio2: art.map(|a| a.precio2).unwrap_or(0.0),
+                precio3: art.map(|a| a.precio3).unwrap_or(0.0),
+                precio4: art.map(|a| a.precio4).unwrap_or(0.0),
+                precio5: art.map(|a| a.precio5).unwrap_or(0.0),
                 fracciones: fracs,
             }
         })
@@ -256,8 +263,9 @@ fn get_fracciones_init_data() -> Result<FraccionesInitData, String> {
     articulos.sort_by(|a, b| a.desc.cmp(&b.desc));
 
     let etiquetas = db::get_all_etiquetas().unwrap_or_default();
+    let seguimientos = db::get_all_seguimientos().unwrap_or_default();
 
-    Ok(FraccionesInitData { fracciones, articulos, etiquetas })
+    Ok(FraccionesInitData { fracciones, articulos, etiquetas, seguimientos })
 }
 
 #[tauri::command]
@@ -266,6 +274,7 @@ fn save_fraccion_pairing(
     unidad_fraccion: String,
     numart_destino: String,
 ) -> Result<(), String> {
+    db::add_seguimiento(&numart_origen, &unidad_fraccion).map_err(|e| e.to_string())?;
     db::upsert_pairing(&numart_origen, &unidad_fraccion, &numart_destino)
         .map_err(|e| e.to_string())
 }
@@ -309,6 +318,66 @@ fn set_emparejamiento_etiquetas(
         .map_err(|e| e.to_string())
 }
 
+// ── Comandos XLSX ──────────────────────────────────────────────
+
+#[tauri::command]
+fn export_pairings_template(path: String) -> Result<(), String> {
+    xlsx::write_template(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_pairings_xlsx(path: String) -> Result<usize, String> {
+    let rows = db::get_all_pairings_vec().map_err(|e| e.to_string())?;
+    let count = rows.len();
+    xlsx::write_pairings(&path, &rows).map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+#[tauri::command]
+fn parse_pairings_xlsx(path: String) -> Result<ParsePairingsResult, String> {
+    xlsx::parse_pairings(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn import_pairings(rows: Vec<PairingRow>, mode: String) -> Result<usize, String> {
+    db::import_pairings(&rows, &mode).map_err(|e| e.to_string())
+}
+
+// ── Comandos de Seguimientos ───────────────────────────────────
+
+#[tauri::command]
+fn add_seguimiento_fraccion(numart_origen: String, unidad_fraccion: String) -> Result<(), String> {
+    db::add_seguimiento(&numart_origen, &unidad_fraccion).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_seguimiento_fraccion(numart_origen: String, unidad_fraccion: String) -> Result<(), String> {
+    db::delete_seguimiento(&numart_origen, &unidad_fraccion).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_seguimientos_template(path: String) -> Result<(), String> {
+    xlsx::write_seguimientos_template(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn export_seguimientos_xlsx(path: String) -> Result<usize, String> {
+    let rows = db::get_all_seguimientos().map_err(|e| e.to_string())?;
+    let count = rows.len();
+    xlsx::write_seguimientos(&path, &rows).map_err(|e| e.to_string())?;
+    Ok(count)
+}
+
+#[tauri::command]
+fn parse_seguimientos_xlsx(path: String) -> Result<ParseSeguimientosResult, String> {
+    xlsx::parse_seguimientos(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn import_seguimientos(rows: Vec<SeguimientoFraccionRow>, mode: String) -> Result<usize, String> {
+    db::import_seguimientos(&rows, &mode).map_err(|e| e.to_string())
+}
+
 // ── Entry point ────────────────────────────────────────────────
 
 #[tauri::command]
@@ -329,7 +398,7 @@ pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("lufal_ordenes_tauri_lib=debug".parse().unwrap()),
+                .add_directive("lufal_auxiliar_desktop_lib=debug".parse().unwrap()),
         )
         .init();
 
@@ -367,6 +436,16 @@ pub fn run() {
             update_etiqueta,
             delete_etiqueta,
             set_emparejamiento_etiquetas,
+            export_pairings_template,
+            export_pairings_xlsx,
+            parse_pairings_xlsx,
+            import_pairings,
+            add_seguimiento_fraccion,
+            delete_seguimiento_fraccion,
+            export_seguimientos_template,
+            export_seguimientos_xlsx,
+            parse_seguimientos_xlsx,
+            import_seguimientos,
         ])
         .run(tauri::generate_context!())
         .expect("Error al iniciar la aplicación Tauri");

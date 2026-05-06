@@ -15,7 +15,7 @@ pub struct AppConfig {
 impl AppConfig {
     /// Carga la configuración desde:
     ///   1. Variables de entorno GRPC_ENDPOINT y API_KEY (desarrollo)
-    ///   2. %APPDATA%\lufal-ordenes\config.toml (producción)
+    ///   2. %APPDATA%\lufal-auxiliar-desktop\config.toml (producción)
     pub fn load() -> Result<Self> {
         // Override por env vars (útil en desarrollo)
         if let (Ok(ep), Ok(key)) = (
@@ -67,7 +67,7 @@ impl AppConfig {
     }
 
     pub fn config_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("lufal-ordenes").join("config.toml"))
+        dirs::config_dir().map(|d| d.join("lufal-auxiliar-desktop").join("config.toml"))
     }
 
     /// Actualiza un campo DBF en el TOML preservando todos los demás campos.

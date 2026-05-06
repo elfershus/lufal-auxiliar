@@ -1,13 +1,14 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Nav from './components/Nav.svelte';
 	import OrdenesView from './views/OrdenesView.svelte';
 	import DetalleView from './views/DetalleView.svelte';
 	import ConfigView from './views/ConfigView.svelte';
 	import SetupView from './views/SetupView.svelte';
 	import FraccionesView from './views/FraccionesView.svelte';
-	import UpdateBanner from './components/UpdateBanner.svelte';
 	import { initClient } from './lib/grpc.js';
-	import { checkForUpdates, type Update } from './lib/updater.js';
+	import { check, type Update } from '@tauri-apps/plugin-updater';
+	import { getCurrentWindow } from '@tauri-apps/api/window';
 
 	type View = 'ordenes' | 'detalle' | 'config' | 'fracciones';
 
@@ -16,7 +17,9 @@
 	let detalleTipodoc = $state('');
 	let detalleNumdoc = $state('');
 	let needsSetup = $state(false);
+
 	let pendingUpdate = $state<Update | null>(null);
+	let updateDownloaded = $state(false);
 
 	$effect(() => {
 		initClient().then((configured) => {
@@ -24,10 +27,33 @@
 			activeView = 'ordenes';
 		});
 
-		// Revisar actualizaciones en segundo plano, sin bloquear el inicio
-		checkForUpdates().then((update) => {
-			if (update?.available) pendingUpdate = update;
-		});
+		// Verificar actualización en background; descargar si hay una disponible
+		check().then(async (update) => {
+			if (update?.available) {
+				pendingUpdate = update;
+				await update.download();
+				updateDownloaded = true;
+			}
+		}).catch(() => {});
+	});
+
+	onMount(() => {
+		const appWindow = getCurrentWindow();
+		let unlisten: (() => void) | undefined;
+
+		// Instalar silenciosamente al cerrar si la descarga ya terminó
+		appWindow.onCloseRequested(async (event) => {
+			if (pendingUpdate && updateDownloaded) {
+				event.preventDefault();
+				try {
+					await pendingUpdate.install();
+				} catch {
+					appWindow.destroy();
+				}
+			}
+		}).then(fn => { unlisten = fn; });
+
+		return () => { unlisten?.(); };
 	});
 
 	function goToDetalle(tipodoc: string, numdoc: string) {
@@ -69,8 +95,4 @@
 			<FraccionesView onGoConfig={() => navigate('config')} />
 		{/if}
 	</main>
-{/if}
-
-{#if pendingUpdate}
-	<UpdateBanner update={pendingUpdate} onDismiss={() => (pendingUpdate = null)} />
 {/if}

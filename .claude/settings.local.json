@@ -36,7 +36,31 @@
       "Bash(python -c ' *)",
       "Bash(cargo check *)",
       "Bash(npx tsc *)",
-      "Bash(xargs wc *)"
+      "Bash(xargs wc *)",
+      "Bash(dir \"%USERPROFILE%\\\\.tauri\")",
+      "Bash(dir \"%USERPROFILE%\" /b)",
+      "Bash(findstr -i tauri)",
+      "Bash(dir \"%TEMP%\" /b)",
+      "Bash(git init *)",
+      "Bash(git remote *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\fernando\\\\.tauri\")",
+      "Bash(cp \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-ordenes-tauri\\\\%USERPROFILE%\\\\.tauri\\\\lufal-ordenes.key\" \"C:\\\\Users\\\\fernando\\\\.tauri\\\\lufal-ordenes.key\")",
+      "Bash(cp \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-ordenes-tauri\\\\%USERPROFILE%\\\\.tauri\\\\lufal-ordenes.key.pub\" \"C:\\\\Users\\\\fernando\\\\.tauri\\\\lufal-ordenes.key.pub\")",
+      "Bash(git rm *)",
+      "Bash(git commit *)",
+      "Bash(gh release *)",
+      "Bash(node *)",
+      "Bash(python3 *)",
+      "Bash(npx vite *)",
+      "Bash(grep -n \"^{/if}$\" \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-aux-desktop\\\\src\\\\views\\\\FraccionesView.svelte\")",
+      "Bash(python *)",
+      "Bash(ls \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-aux-desktop\\\\scripts\")",
+      "Bash(ls \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-aux-desktop\\\\.github\")",
+      "Bash(ls \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-aux-desktop\\\\.env\")",
+      "Bash(ssh cloud-api *)"
     ]
   }
 }

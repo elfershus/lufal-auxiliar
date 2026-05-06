@@ -153,5 +153,56 @@ pub struct ArticuloFracciones {
     pub numart: String,
     pub desc: String,
     pub unidad_base: String,
+    pub precio1: f64,
+    pub precio2: f64,
+    pub precio3: f64,
+    pub precio4: f64,
+    pub precio5: f64,
     pub fracciones: Vec<FraccionRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairingRow {
+    pub numart_origen:   String,
+    pub unidad_fraccion: String,
+    pub numart_destino:  String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PairingRowPreview {
+    pub row_index:       usize,
+    pub numart_origen:   String,
+    pub unidad_fraccion: String,
+    pub numart_destino:  String,
+    pub errors:          Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsePairingsResult {
+    pub rows:        Vec<PairingRowPreview>,
+    pub total_rows:  usize,
+    pub valid_count: usize,
+    pub error_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SeguimientoFraccionRow {
+    pub numart_origen:   String,
+    pub unidad_fraccion: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SeguimientoFraccionPreview {
+    pub row_index:       usize,
+    pub numart_origen:   String,
+    pub unidad_fraccion: String,
+    pub errors:          Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParseSeguimientosResult {
+    pub rows:        Vec<SeguimientoFraccionPreview>,
+    pub total_rows:  usize,
+    pub valid_count: usize,
+    pub error_count: usize,
 }
