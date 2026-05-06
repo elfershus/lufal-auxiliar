@@ -74,10 +74,10 @@ def find_artifacts() -> tuple[Path, Path]:
         ROOT / "src-tauri" / "target" / "release" / "bundle" / "nsis",
     ]
     for bundle_dir in candidates:
-        exes = sorted(bundle_dir.glob("*_x64-setup.exe"))
-        sigs = sorted(bundle_dir.glob("*_x64-setup.exe.sig"))
+        exes = sorted(bundle_dir.glob("*_x64-setup.exe"), key=lambda p: p.stat().st_mtime)
+        sigs = sorted(bundle_dir.glob("*_x64-setup.exe.sig"), key=lambda p: p.stat().st_mtime)
         if exes and sigs:
-            return exes[0], sigs[0]
+            return exes[-1], sigs[-1]
     raise FileNotFoundError("No se encontraron artifacts .exe — ¿el build terminó correctamente?")
 
 
@@ -116,9 +116,9 @@ def upload(version: str, zip_path: Path, sig_path: Path, zip_safe: str) -> None:
     safe_zip = zip_path.parent / zip_safe
     safe_sig = zip_path.parent / (zip_safe + ".sig")
     if zip_path != safe_zip:
-        zip_path.rename(safe_zip)
+        zip_path.replace(safe_zip)
     if sig_path != safe_sig:
-        sig_path.rename(safe_sig)
+        sig_path.replace(safe_sig)
 
     remote_dir = f"{DEPLOY_PATH}/v{version}"
     ssh(f"mkdir -p {remote_dir}")

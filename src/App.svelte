@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import Nav from './components/Nav.svelte';
 	import OrdenesView from './views/OrdenesView.svelte';
 	import DetalleView from './views/DetalleView.svelte';
@@ -7,53 +6,36 @@
 	import SetupView from './views/SetupView.svelte';
 	import FraccionesView from './views/FraccionesView.svelte';
 	import { initClient } from './lib/grpc.js';
-	import { check, type Update } from '@tauri-apps/plugin-updater';
-	import { getCurrentWindow } from '@tauri-apps/api/window';
+	import { check } from '@tauri-apps/plugin-updater';
 
 	type View = 'ordenes' | 'detalle' | 'config' | 'fracciones';
 
-	// null = verificando configuración al inicio
+	// null = verificando actualización/configuración al inicio
 	let activeView = $state<View | null>(null);
 	let detalleTipodoc = $state('');
 	let detalleNumdoc = $state('');
 	let needsSetup = $state(false);
-
-	let pendingUpdate = $state<Update | null>(null);
-	let updateDownloaded = $state(false);
+	let updating = $state(false);
 
 	$effect(() => {
-		initClient().then((configured) => {
+		(async () => {
+			// Verificar e instalar actualización antes de cargar la app
+			try {
+				const update = await check();
+				if (update?.available) {
+					updating = true;
+					await update.downloadAndInstall();
+					// downloadAndInstall() reinicia la app automáticamente
+					return;
+				}
+			} catch {
+				// Sin conexión o error: continuar normalmente
+			}
+
+			const configured = await initClient();
 			needsSetup = !configured;
 			activeView = 'ordenes';
-		});
-
-		// Verificar actualización en background; descargar si hay una disponible
-		check().then(async (update) => {
-			if (update?.available) {
-				pendingUpdate = update;
-				await update.download();
-				updateDownloaded = true;
-			}
-		}).catch(() => {});
-	});
-
-	onMount(() => {
-		const appWindow = getCurrentWindow();
-		let unlisten: (() => void) | undefined;
-
-		// Instalar silenciosamente al cerrar si la descarga ya terminó
-		appWindow.onCloseRequested(async (event) => {
-			if (pendingUpdate && updateDownloaded) {
-				event.preventDefault();
-				try {
-					await pendingUpdate.install();
-				} catch {
-					appWindow.destroy();
-				}
-			}
-		}).then(fn => { unlisten = fn; });
-
-		return () => { unlisten?.(); };
+		})();
 	});
 
 	function goToDetalle(tipodoc: string, numdoc: string) {
@@ -71,7 +53,12 @@
 	}
 </script>
 
-{#if activeView === null}
+{#if updating}
+	<div class="min-h-screen bg-bg flex items-center justify-center">
+		<p class="text-text-muted text-sm">Instalando actualización…</p>
+	</div>
+
+{:else if activeView === null}
 	<!-- Verificando configuración inicial -->
 	<div class="min-h-screen bg-bg"></div>
 
