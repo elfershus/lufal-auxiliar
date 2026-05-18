@@ -60,7 +60,9 @@
       "Bash(ls \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-aux-desktop\\\\scripts\")",
       "Bash(ls \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-aux-desktop\\\\.github\")",
       "Bash(ls \"C:\\\\Users\\\\fernando\\\\Desktop\\\\lufal-aux-desktop\\\\.env\")",
-      "Bash(ssh cloud-api *)"
+      "Bash(ssh cloud-api *)",
+      "Bash(Get-ChildItem *)",
+      "Bash(findstr /i \"error warning finished\")"
     ]
   }
 }

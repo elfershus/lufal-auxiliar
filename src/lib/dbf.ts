@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import type { ArticuloFracciones, ArticuloSearchResult, DbfPaths, Etiqueta, PairingRow, ParsePairingsResult, SeguimientoFraccionRow, ParseSeguimientosResult } from './types.js';
+import type { ArticuloFracciones, ArticuloSearchResult, DbfPaths, EstadisticasResult, Etiqueta, PairingRow, ParsePairingsResult, SeguimientoFraccionRow, ParseSeguimientosResult } from './types.js';
 
 export interface FraccionesInitData {
 	fracciones: ArticuloFracciones[];
@@ -19,6 +19,17 @@ export function saveDbfArts(path: string): Promise<void> {
 
 export function saveDbfUnidades(path: string): Promise<void> {
 	return invoke('save_dbf_unidades', { path });
+}
+
+export function saveDbfDocum(path: string): Promise<void> {
+	return invoke('save_dbf_docum', { path });
+}
+
+export function getEstadisticasDocum(
+	fechaFrom?: string,
+	fechaTo?: string
+): Promise<EstadisticasResult> {
+	return invoke('get_estadisticas_docum', { fechaFrom, fechaTo });
 }
 
 export function getFraccionesInitData(): Promise<FraccionesInitData> {

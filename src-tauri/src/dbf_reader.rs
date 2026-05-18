@@ -173,7 +173,11 @@ fn parse_logical(raw: &[u8]) -> Option<bool> {
 
 // ── Public readers ─────────────────────────────────────────────────────────────
 
-pub fn read_documentos(path: &Path) -> Result<Vec<Documento>> {
+pub fn read_documentos(
+    path: &Path,
+    from_date: Option<NaiveDate>,
+    to_date: Option<NaiveDate>,
+) -> Result<Vec<Documento>> {
     tracing::info!(path = %path.display(), "dbf_reader: abriendo DOCUM.DBF");
     let data = fs::read(path)
         .with_context(|| format!("Cannot read DBF file: {}", path.display()))?;
@@ -182,6 +186,7 @@ pub fn read_documentos(path: &Path) -> Result<Vec<Documento>> {
     let map = build_field_map(&header.fields);
     let rec_size = header.record_size as usize;
     let data_start = header.header_size as usize;
+    let fechacapt_info = map.get("FECHACAPT").copied();
 
     let mut result = Vec::with_capacity(header.num_records as usize);
 
@@ -192,6 +197,19 @@ pub fn read_documentos(path: &Path) -> Result<Vec<Documento>> {
         }
         let rec = &data[start..start + rec_size];
         let deleted_in_dbf = rec[0] == b'*';
+
+        if from_date.is_some() || to_date.is_some() {
+            if let Some((fc_off, fc_len, _)) = fechacapt_info {
+                let raw = &rec[fc_off..fc_off + fc_len];
+                match parse_date(raw) {
+                    None => continue,
+                    Some(d) => {
+                        if from_date.map_or(false, |f| d < f) { continue; }
+                        if to_date.map_or(false, |t| d > t) { continue; }
+                    }
+                }
+            }
+        }
 
         macro_rules! c { ($f:expr) => { parse_char(get_field(rec, &map, $f)) }; }
         macro_rules! n { ($f:expr) => { parse_numeric(get_field(rec, &map, $f)) }; }

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { listAlmacenes } from '../lib/grpc.js';
-	import { getDbfPaths, saveDbfArts, saveDbfUnidades } from '../lib/dbf.js';
+	import { getDbfPaths, saveDbfArts, saveDbfUnidades, saveDbfDocum } from '../lib/dbf.js';
 	import { appConfig } from '../lib/config.svelte.js';
 	import type { AlmacenRecord } from '../lib/types.js';
 
@@ -40,10 +40,13 @@
 	// ── DBF paths config
 	let artsPath = $state('');
 	let unidadesPath = $state('');
+	let documPath = $state('');
 	let savingArts = $state(false);
 	let savingUnidades = $state(false);
+	let savingDocum = $state(false);
 	let savedArts = $state(false);
 	let savedUnidades = $state(false);
+	let savedDocum = $state(false);
 	let dbfError = $state('');
 
 	$effect(() => {
@@ -52,6 +55,7 @@
 			getDbfPaths().then((p) => {
 				artsPath = p.dbf_arts ?? '';
 				unidadesPath = p.dbf_unidades ?? '';
+				documPath = p.dbf_docum ?? '';
 			});
 		}
 	});
@@ -120,6 +124,28 @@
 			dbfError = e instanceof Error ? e.message : String(e);
 		} finally {
 			savingUnidades = false;
+		}
+	}
+
+	async function seleccionarDocum() {
+		dbfError = '';
+		const selected = await open({
+			directory: false,
+			multiple: false,
+			title: 'Seleccionar archivo de documentos (Docum.DBF)',
+			filters: [{ name: 'dBASE', extensions: ['dbf', 'DBF'] }]
+		});
+		if (!selected || typeof selected !== 'string') return;
+		savingDocum = true;
+		try {
+			await saveDbfDocum(selected);
+			documPath = selected;
+			savedDocum = true;
+			setTimeout(() => (savedDocum = false), 2000);
+		} catch (e) {
+			dbfError = e instanceof Error ? e.message : String(e);
+		} finally {
+			savingDocum = false;
 		}
 	}
 </script>
@@ -278,7 +304,7 @@
 				<div class="border-t border-slate-100 my-3"></div>
 
 				<!-- Fracciones -->
-				<div>
+				<div class="mb-3">
 					<p class="text-[11px] font-semibold text-slate-500 mb-1.5">Archivo de fracciones</p>
 					{#if unidadesPath}
 						<div class="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-bg border border-slate-200">
@@ -314,6 +340,49 @@
 								<line x1="19" y1="5" x2="5" y2="19" /><circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" />
 							</svg>
 							{unidadesPath ? 'Cambiar archivo de fracciones' : 'Seleccionar archivo de fracciones'}
+						{/if}
+					</button>
+				</div>
+
+				<div class="border-t border-slate-100 my-3"></div>
+
+				<!-- Documentos -->
+				<div>
+					<p class="text-[11px] font-semibold text-slate-500 mb-1.5">Archivo de documentos (Docum.DBF)</p>
+					{#if documPath}
+						<div class="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-bg border border-slate-200">
+							<svg class="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+							</svg>
+							<span class="font-mono text-[11px] text-slate-600 truncate flex-1" title={documPath}>
+								{documPath.split(/[\\/]/).pop()}
+							</span>
+							{#if savedDocum}
+								<svg class="w-3 h-3 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+									<polyline points="20 6 9 17 4 12" />
+								</svg>
+							{/if}
+						</div>
+					{/if}
+					<button
+						onclick={seleccionarDocum}
+						disabled={savingDocum}
+						class="w-full h-9 rounded-lg text-[13px] font-medium font-barlow transition-colors flex items-center justify-center gap-2
+							{documPath
+								? 'bg-bg border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100'
+								: 'bg-navy text-white hover:opacity-90 active:opacity-80'}
+							disabled:opacity-40 disabled:cursor-not-allowed"
+					>
+						{#if savingDocum}
+							<svg class="w-3.5 h-3.5 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+								<path d="M21 12a9 9 0 11-6.219-8.56" />
+							</svg>
+							Guardando…
+						{:else}
+							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+								<line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+							</svg>
+							{documPath ? 'Cambiar archivo de documentos' : 'Seleccionar archivo de documentos'}
 						{/if}
 					</button>
 				</div>

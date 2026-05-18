@@ -5,10 +5,11 @@
 	import ConfigView from './views/ConfigView.svelte';
 	import SetupView from './views/SetupView.svelte';
 	import FraccionesView from './views/FraccionesView.svelte';
+	import EstadisticasView from './views/EstadisticasView.svelte';
 	import { initClient } from './lib/grpc.js';
 	import { check } from '@tauri-apps/plugin-updater';
 
-	type View = 'ordenes' | 'detalle' | 'config' | 'fracciones';
+	type View = 'ordenes' | 'detalle' | 'config' | 'fracciones' | 'estadisticas';
 
 	// null = verificando actualización/configuración al inicio
 	let activeView = $state<View | null>(null);
@@ -80,6 +81,8 @@
 			<ConfigView onBack={goToList} />
 		{:else if activeView === 'fracciones'}
 			<FraccionesView onGoConfig={() => navigate('config')} />
+		{:else if activeView === 'estadisticas'}
+			<EstadisticasView onGoConfig={() => navigate('config')} />
 		{/if}
 	</main>
 {/if}

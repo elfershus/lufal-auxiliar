@@ -147,6 +147,29 @@ export interface ArticuloFracciones {
 export interface DbfPaths {
 	dbf_arts: string | null;
 	dbf_unidades: string | null;
+	dbf_docum: string | null;
+}
+
+export interface PeriodoStat {
+	periodo: string;
+	ventas_importe: number;
+	compras_importe: number;
+	ventas_count: number;
+	compras_count: number;
+	facturas_importe: number;
+	facturas_count: number;
+	remisiones_importe: number;
+	remisiones_count: number;
+	notas_importe: number;
+	notas_count: number;
+}
+
+export interface EstadisticasResult {
+	periodos: PeriodoStat[];
+	total_ventas: number;
+	total_compras: number;
+	total_ventas_count: number;
+	total_compras_count: number;
 }
 
 export interface PairingRow {

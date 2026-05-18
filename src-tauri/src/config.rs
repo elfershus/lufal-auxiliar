@@ -10,6 +10,8 @@ pub struct AppConfig {
     pub dbf_arts: Option<String>,
     #[serde(default)]
     pub dbf_unidades: Option<String>,
+    #[serde(default)]
+    pub dbf_docum: Option<String>,
 }
 
 impl AppConfig {
@@ -27,6 +29,7 @@ impl AppConfig {
                 api_key: key,
                 dbf_arts: std::env::var("DBF_ARTS").ok(),
                 dbf_unidades: std::env::var("DBF_UNIDADES").ok(),
+                dbf_docum: std::env::var("DBF_DOCUM").ok(),
             });
         }
 
@@ -125,6 +128,17 @@ impl AppConfig {
                 .to_string()
         };
 
+        let dbf_docum = if key == "dbf_docum" {
+            value.to_string()
+        } else {
+            existing
+                .as_ref()
+                .and_then(|t| t.get("dbf_docum"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+
         let mut content = format!(
             "grpc_endpoint = \"{}\"\napi_key       = \"{}\"\n",
             grpc_endpoint, api_key
@@ -138,6 +152,10 @@ impl AppConfig {
         if !dbf_unidades.is_empty() {
             let escaped = dbf_unidades.replace('\\', "\\\\");
             content.push_str(&format!("dbf_unidades  = \"{}\"\n", escaped));
+        }
+        if !dbf_docum.is_empty() {
+            let escaped = dbf_docum.replace('\\', "\\\\");
+            content.push_str(&format!("dbf_docum     = \"{}\"\n", escaped));
         }
 
         std::fs::write(&config_path, content)

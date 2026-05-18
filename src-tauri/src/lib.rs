@@ -131,6 +131,7 @@ async fn save_config(
 struct DbfPaths {
     dbf_arts: Option<String>,
     dbf_unidades: Option<String>,
+    dbf_docum: Option<String>,
 }
 
 #[tauri::command]
@@ -139,6 +140,7 @@ fn get_dbf_paths() -> DbfPaths {
     DbfPaths {
         dbf_arts: cfg.as_ref().and_then(|c| c.dbf_arts.clone()),
         dbf_unidades: cfg.as_ref().and_then(|c| c.dbf_unidades.clone()),
+        dbf_docum: cfg.as_ref().and_then(|c| c.dbf_docum.clone()),
     }
 }
 
@@ -150,6 +152,138 @@ fn save_dbf_arts(path: String) -> Result<(), String> {
 #[tauri::command]
 fn save_dbf_unidades(path: String) -> Result<(), String> {
     AppConfig::update_field("dbf_unidades", &path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_dbf_docum(path: String) -> Result<(), String> {
+    AppConfig::update_field("dbf_docum", &path).map_err(|e| e.to_string())
+}
+
+// ── Estadísticas ───────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+struct PeriodoStat {
+    periodo: String,
+    ventas_importe: f64,
+    compras_importe: f64,
+    ventas_count: u32,
+    compras_count: u32,
+    facturas_importe: f64,
+    facturas_count: u32,
+    remisiones_importe: f64,
+    remisiones_count: u32,
+    notas_importe: f64,
+    notas_count: u32,
+}
+
+#[derive(serde::Serialize)]
+struct EstadisticasResult {
+    periodos: Vec<PeriodoStat>,
+    total_ventas: f64,
+    total_compras: f64,
+    total_ventas_count: u32,
+    total_compras_count: u32,
+}
+
+#[tauri::command]
+fn get_estadisticas_docum(
+    fecha_from: Option<String>,
+    fecha_to: Option<String>,
+) -> Result<EstadisticasResult, String> {
+    use std::collections::HashMap;
+    use std::path::Path;
+
+    let cfg = AppConfig::load().ok();
+    let docum_path = cfg
+        .as_ref()
+        .and_then(|c| c.dbf_docum.as_deref())
+        .ok_or_else(|| "Archivo de documentos no configurado".to_string())?;
+
+    let from_date = fecha_from
+        .as_deref()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+    let to_date = fecha_to
+        .as_deref()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+
+    let documentos = dbf_reader::read_documentos(Path::new(docum_path), from_date, to_date)
+        .map_err(|e| e.to_string())?;
+
+    let mut periodos_map: HashMap<String, PeriodoStat> = HashMap::new();
+
+    for doc in &documentos {
+        if doc.deleted_in_dbf || doc.status != 0 {
+            continue;
+        }
+
+        let es_venta = matches!(doc.tipodoc.trim(), "R" | "F" | "N") && doc.formapago.trim() == "1";
+        let es_compra = doc.tipodoc.trim() == "C";
+
+        if !es_venta && !es_compra {
+            continue;
+        }
+
+        let fecha = match doc.fechacapt {
+            Some(f) => f,
+            None => continue,
+        };
+
+        if let Some(from) = from_date {
+            if fecha < from {
+                continue;
+            }
+        }
+        if let Some(to) = to_date {
+            if fecha > to {
+                continue;
+            }
+        }
+
+        let periodo = fecha.format("%Y-%m").to_string();
+        let entry = periodos_map.entry(periodo.clone()).or_insert(PeriodoStat {
+            periodo,
+            ventas_importe: 0.0,
+            compras_importe: 0.0,
+            ventas_count: 0,
+            compras_count: 0,
+            facturas_importe: 0.0,
+            facturas_count: 0,
+            remisiones_importe: 0.0,
+            remisiones_count: 0,
+            notas_importe: 0.0,
+            notas_count: 0,
+        });
+
+        if es_venta {
+            entry.ventas_importe += doc.importe;
+            entry.ventas_count += 1;
+            match doc.tipodoc.trim() {
+                "F" => { entry.facturas_importe += doc.importe; entry.facturas_count += 1; }
+                "R" => { entry.remisiones_importe += doc.importe; entry.remisiones_count += 1; }
+                "N" => { entry.notas_importe += doc.importe; entry.notas_count += 1; }
+                _ => {}
+            }
+        } else {
+            entry.compras_importe += doc.importe;
+            entry.compras_count += 1;
+        }
+    }
+
+    let mut periodos: Vec<PeriodoStat> = periodos_map.into_values().collect();
+    periodos.sort_by(|a, b| a.periodo.cmp(&b.periodo));
+
+    let total_ventas: f64 = periodos.iter().map(|p| p.ventas_importe).sum();
+    let total_compras: f64 = periodos.iter().map(|p| p.compras_importe).sum();
+    let total_ventas_count: u32 = periodos.iter().map(|p| p.ventas_count).sum();
+    let total_compras_count: u32 = periodos.iter().map(|p| p.compras_count).sum();
+
+    Ok(EstadisticasResult {
+        periodos,
+        total_ventas,
+        total_compras,
+        total_ventas_count,
+        total_compras_count,
+    })
 }
 
 #[derive(serde::Serialize)]
@@ -446,6 +580,8 @@ pub fn run() {
             export_seguimientos_xlsx,
             parse_seguimientos_xlsx,
             import_seguimientos,
+            save_dbf_docum,
+            get_estadisticas_docum,
         ])
         .run(tauri::generate_context!())
         .expect("Error al iniciar la aplicación Tauri");
