@@ -6,6 +6,7 @@ import type {
 	ListDocumentosResult,
 	GetDocumentoResult,
 	SeguimientoResult,
+	ListArticulosEtiquetaResult,
 } from './types';
 
 export async function listAlmacenes(): Promise<AlmacenRecord[]> {
@@ -56,4 +57,14 @@ export async function initClient(): Promise<boolean> {
 
 export async function saveConfig(endpoint: string, apiKey: string): Promise<void> {
 	return invoke<void>('save_config', { endpoint, apiKey });
+}
+
+export async function listArticulosEtiqueta(
+	q?: string,
+	pageToken?: string
+): Promise<ListArticulosEtiquetaResult> {
+	return invoke<ListArticulosEtiquetaResult>('list_articulos_etiqueta', {
+		q: q || null,
+		pageToken: pageToken || null
+	});
 }

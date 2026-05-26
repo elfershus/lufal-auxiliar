@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { listAlmacenes } from '../lib/grpc.js';
-	import { getDbfPaths, saveDbfArts, saveDbfUnidades, saveDbfDocum } from '../lib/dbf.js';
+	import { getDbfPaths, saveDbfArts, saveDbfUnidades, saveDbfDocum, saveDbfCxc, saveSucursalesMap } from '../lib/dbf.js';
 	import { appConfig } from '../lib/config.svelte.js';
-	import type { AlmacenRecord } from '../lib/types.js';
+	import type { AlmacenRecord, SucursalEntry } from '../lib/types.js';
 
 	const PASSWORD = 'wombocombo69';
 
@@ -47,7 +47,16 @@
 	let savedArts = $state(false);
 	let savedUnidades = $state(false);
 	let savedDocum = $state(false);
+	let cxcPath = $state('');
+	let savingCxc = $state(false);
+	let savedCxc = $state(false);
 	let dbfError = $state('');
+
+	// ── Sucursales mapping
+	let sucursalesMap = $state<SucursalEntry[]>([]);
+	let savingSucursales = $state(false);
+	let savedSucursales = $state(false);
+	let sucursalesError = $state('');
 
 	$effect(() => {
 		if (unlocked) {
@@ -56,6 +65,8 @@
 				artsPath = p.dbf_arts ?? '';
 				unidadesPath = p.dbf_unidades ?? '';
 				documPath = p.dbf_docum ?? '';
+				cxcPath = p.dbf_cxc ?? '';
+				sucursalesMap = p.sucursales ?? [];
 			});
 		}
 	});
@@ -68,10 +79,31 @@
 			if (!selectedNumalm && almacenes.length > 0) {
 				selectedNumalm = almacenes[0].numalm;
 			}
+			// Asegurar que haya una entrada por cada almacén
+			for (const alm of almacenes) {
+				if (!sucursalesMap.find((s) => s.numalm === alm.numalm)) {
+					sucursalesMap = [...sucursalesMap, { numalm: alm.numalm, letra: '' }];
+				}
+			}
 		} catch (e) {
 			errorMsg = e instanceof Error ? e.message : String(e);
 		} finally {
 			cargando = false;
+		}
+	}
+
+	async function guardarSucursales() {
+		sucursalesError = '';
+		savingSucursales = true;
+		try {
+			const validas = sucursalesMap.filter((s) => s.letra.trim().length > 0);
+			await saveSucursalesMap(validas);
+			savedSucursales = true;
+			setTimeout(() => (savedSucursales = false), 2000);
+		} catch (e) {
+			sucursalesError = e instanceof Error ? e.message : String(e);
+		} finally {
+			savingSucursales = false;
 		}
 	}
 
@@ -146,6 +178,28 @@
 			dbfError = e instanceof Error ? e.message : String(e);
 		} finally {
 			savingDocum = false;
+		}
+	}
+
+	async function seleccionarCxc() {
+		dbfError = '';
+		const selected = await open({
+			directory: false,
+			multiple: false,
+			title: 'Seleccionar archivo de cuentas por cobrar (Cxc.DBF)',
+			filters: [{ name: 'dBASE', extensions: ['dbf', 'DBF'] }]
+		});
+		if (!selected || typeof selected !== 'string') return;
+		savingCxc = true;
+		try {
+			await saveDbfCxc(selected);
+			cxcPath = selected;
+			savedCxc = true;
+			setTimeout(() => (savedCxc = false), 2000);
+		} catch (e) {
+			dbfError = e instanceof Error ? e.message : String(e);
+		} finally {
+			savingCxc = false;
 		}
 	}
 </script>
@@ -386,6 +440,96 @@
 						{/if}
 					</button>
 				</div>
+
+				<div class="border-t border-slate-100 my-3"></div>
+
+				<!-- CXC -->
+				<div>
+					<p class="text-[11px] font-semibold text-slate-500 mb-1.5">Archivo de cuentas por cobrar (Cxc.DBF)</p>
+					{#if cxcPath}
+						<div class="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-bg border border-slate-200">
+							<svg class="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+							</svg>
+							<span class="font-mono text-[11px] text-slate-600 truncate flex-1" title={cxcPath}>
+								{cxcPath.split(/[\\/]/).pop()}
+							</span>
+							{#if savedCxc}
+								<svg class="w-3 h-3 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+									<polyline points="20 6 9 17 4 12" />
+								</svg>
+							{/if}
+						</div>
+					{/if}
+					<button
+						onclick={seleccionarCxc}
+						disabled={savingCxc}
+						class="w-full h-9 rounded-lg text-[13px] font-medium font-barlow transition-colors flex items-center justify-center gap-2
+							{cxcPath
+								? 'bg-bg border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100'
+								: 'bg-navy text-white hover:opacity-90 active:opacity-80'}
+							disabled:opacity-40 disabled:cursor-not-allowed"
+					>
+						{#if savingCxc}
+							<svg class="w-3.5 h-3.5 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+								<path d="M21 12a9 9 0 11-6.219-8.56" />
+							</svg>
+							Guardando…
+						{:else}
+							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+								<circle cx="12" cy="12" r="10" /><path d="M16 8h-6a2 2 0 000 4h4a2 2 0 010 4H8" /><line x1="12" y1="6" x2="12" y2="8" /><line x1="12" y1="16" x2="12" y2="18" />
+							</svg>
+							{cxcPath ? 'Cambiar archivo de CXC' : 'Seleccionar archivo de CXC'}
+						{/if}
+					</button>
+				</div>
+			</div>
+			<!-- Sucursales -->
+			<div class="bg-surface rounded-card p-5 shadow-card mt-4 animate-fadeSlide" style="animation-delay: 120ms">
+				<h2 class="text-[11px] font-semibold tracking-[0.1em] uppercase text-slate-400 mb-1">
+					Letras de sucursales
+				</h2>
+				<p class="text-[11px] text-slate-400 mb-4">
+					Asigna la letra que identifica cada sucursal en el campo KEYDOCUM de CXC.DBF.
+				</p>
+
+				{#if sucursalesError}
+					<p class="text-[12px] text-red-500 mb-3">{sucursalesError}</p>
+				{/if}
+
+				{#if sucursalesMap.length === 0}
+					<p class="text-[12px] text-slate-400 mb-4 italic">Cargando almacenes…</p>
+				{:else}
+					<div class="border border-slate-200 rounded-lg overflow-hidden mb-3">
+						<div class="grid grid-cols-[3rem_1fr_4rem] bg-bg border-b border-slate-200 px-3 py-1.5">
+							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">Núm.</span>
+							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">Nombre</span>
+							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider text-center">Letra</span>
+						</div>
+						{#each sucursalesMap as entry, i (entry.numalm)}
+							{@const alm = almacenes.find((a) => a.numalm === entry.numalm)}
+							<div class="grid grid-cols-[3rem_1fr_4rem] px-3 py-1.5 items-center {i > 0 ? 'border-t border-slate-100' : ''}">
+								<span class="font-mono text-[12px] text-slate-500">{entry.numalm}</span>
+								<span class="text-[12px] text-slate-600 truncate pr-2">{alm?.nomalm ?? ''}</span>
+								<input
+									type="text"
+									maxlength="1"
+									bind:value={entry.letra}
+									placeholder="—"
+									class="w-9 h-7 mx-auto text-center font-mono text-[14px] font-bold uppercase rounded border border-slate-200 bg-bg text-navy focus:outline-none focus:ring-2 focus:ring-amber/60 block"
+								/>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<button
+					onclick={guardarSucursales}
+					disabled={savingSucursales || sucursalesMap.length === 0}
+					class="w-full h-10 rounded-lg text-[14px] font-medium font-barlow transition-colors {savedSucursales ? 'bg-green-500 text-white cursor-default' : 'bg-navy text-white hover:opacity-90 active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed'}"
+				>
+					{savedSucursales ? '✓ Guardado' : savingSucursales ? 'Guardando…' : 'Guardar letras'}
+				</button>
 			</div>
 		{/if}
 	</div>

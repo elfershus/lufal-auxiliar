@@ -947,7 +947,7 @@
                     <h1
                         class="font-barlow-condensed text-[22px] font-bold text-white leading-none"
                     >
-                        Verificador de Fracciones
+                        Fracciones
                     </h1>
                 </div>
             </div>

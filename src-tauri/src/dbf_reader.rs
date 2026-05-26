@@ -808,7 +808,7 @@ pub fn read_conccxc(path: &Path) -> Result<Vec<Conccxc>> {
     Ok(result)
 }
 
-pub fn read_cxc(path: &Path) -> Result<Vec<Cxc>> {
+pub fn read_cxc(path: &Path, min_date: Option<chrono::NaiveDate>) -> Result<Vec<Cxc>> {
     tracing::info!(path = %path.display(), "dbf_reader: abriendo Cxc.DBF");
     let data = fs::read(path)
         .with_context(|| format!("Cannot read DBF file: {}", path.display()))?;
@@ -833,13 +833,18 @@ pub fn read_cxc(path: &Path) -> Result<Vec<Cxc>> {
         macro_rules! d { ($f:expr) => { parse_date(get_field(rec, &map, $f)) }; }
         macro_rules! l { ($f:expr) => { parse_logical(get_field(rec, &map, $f)) }; }
 
+        let fecha = d!("FECHA");
+        if let (Some(min), Some(f)) = (min_date, fecha) {
+            if f < min { continue; }
+        }
+
         result.push(Cxc {
             keycxc:     c!("KEYCXC"),
             numcli:     c!("NUMCLI"),
             conc:       c!("CONC"),
             numdoc:     c!("NUMDOC"),
             refer:      c!("REFER"),
-            fecha:      d!("FECHA"),
+            fecha,
             venc:       d!("VENC"),
             importe:    n!("IMPORTE"),
             tc:         n!("TC"),

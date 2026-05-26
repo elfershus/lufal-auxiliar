@@ -14,7 +14,8 @@ pub mod proto {
 use proto::vfp_sync_service_client::VfpSyncServiceClient;
 use proto::{
     BuscarComprasRequest, BuscarRemisionesRequest, GetArticuloRequest,
-    GetDocumentoRequest, GetProveedorRequest, ListAlmacenesRequest, ListDocumentosRequest,
+    GetDocumentoRequest, GetProveedorRequest, ListAlmacenesRequest, ListArticulosRequest,
+    ListDocumentosRequest,
 };
 
 // ── Interceptor de API key ─────────────────────────────────────
@@ -166,6 +167,34 @@ impl GrpcClient {
             }
         }
         Ok(result)
+    }
+
+    // ── Artículos para etiquetas ───────────────────────────────
+
+    pub async fn list_articulos(
+        &mut self,
+        q: Option<String>,
+        page_token: String,
+    ) -> Result<ListArticulosEtiquetaResult> {
+        let req = ListArticulosRequest {
+            q,
+            activo: Some(true),
+            page_size: 30,
+            page_token,
+        };
+        let resp = self.client.list_articulos(req).await?.into_inner();
+        Ok(ListArticulosEtiquetaResult {
+            articulos: resp
+                .articulos
+                .into_iter()
+                .map(|a| ArticuloEtiqueta {
+                    numart: a.numart.trim().to_string(),
+                    desc: a.desc.trim().to_string(),
+                    codigo: a.codigo.trim().to_string(),
+                })
+                .collect(),
+            next_page_token: resp.next_page_token,
+        })
     }
 
     // ── Seguimiento ────────────────────────────────────────────

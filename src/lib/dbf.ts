@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import type { ArticuloFracciones, ArticuloSearchResult, DbfPaths, EstadisticasResult, Etiqueta, PairingRow, ParsePairingsResult, SeguimientoFraccionRow, ParseSeguimientosResult } from './types.js';
+import type { ArticuloFracciones, ArticuloSearchResult, DbfPaths, EstadisticasResult, EstadisticasDosAniosResult, Etiqueta, PairingRow, ParsePairingsResult, SeguimientoFraccionRow, ParseSeguimientosResult, SucursalEntry } from './types.js';
 
 export interface FraccionesInitData {
 	fracciones: ArticuloFracciones[];
@@ -25,11 +25,27 @@ export function saveDbfDocum(path: string): Promise<void> {
 	return invoke('save_dbf_docum', { path });
 }
 
+export function saveDbfCxc(path: string): Promise<void> {
+	return invoke('save_dbf_cxc', { path });
+}
+
+export function saveSucursalesMap(mapping: SucursalEntry[]): Promise<void> {
+	return invoke('save_sucursales_map', { mapping });
+}
+
 export function getEstadisticasDocum(
 	fechaFrom?: string,
-	fechaTo?: string
+	fechaTo?: string,
+	numalm?: string,
 ): Promise<EstadisticasResult> {
-	return invoke('get_estadisticas_docum', { fechaFrom, fechaTo });
+	return invoke('get_estadisticas_docum', { fechaFrom, fechaTo, numalm });
+}
+
+export function getEstadisticasDosAnios(
+	anio: number,
+	numalm?: string,
+): Promise<EstadisticasDosAniosResult> {
+	return invoke('get_estadisticas_dos_anios', { anio, numalm: numalm ?? null });
 }
 
 export function getFraccionesInitData(): Promise<FraccionesInitData> {

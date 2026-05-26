@@ -80,6 +80,36 @@
         <button
             class="w-full flex items-center gap-3 px-4 py-[10px] font-barlow text-[14px] font-medium
 				no-underline transition-colors duration-150 border-l-2 text-left
+				{isActive('estadisticas')
+                ? 'bg-white/[0.12] text-white border-l-[#e11d48]'
+                : 'text-white/55 border-l-transparent hover:text-white hover:bg-white/[0.07]'}"
+            onclick={() => onNavigate("estadisticas")}
+        >
+            <span
+                class="w-[18px] h-[18px] shrink-0 flex"
+                style="color: {isActive('estadisticas')
+                    ? '#e11d48'
+                    : 'rgba(255,255,255,0.35)'}"
+            >
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.75"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <line x1="18" y1="20" x2="18" y2="10" />
+                    <line x1="12" y1="20" x2="12" y2="4" />
+                    <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+            </span>
+            <span>Estadísticas</span>
+        </button>
+
+        <button
+            class="w-full flex items-center gap-3 px-4 py-[10px] font-barlow text-[14px] font-medium
+				no-underline transition-colors duration-150 border-l-2 text-left
 				{isActive('ordenes')
                 ? 'bg-white/[0.12] text-white border-l-[#e11d48]'
                 : 'text-white/55 border-l-transparent hover:text-white hover:bg-white/[0.07]'}"
@@ -107,7 +137,7 @@
                     <line x1="8" y1="17" x2="16" y2="17" />
                 </svg>
             </span>
-            <span>Órdenes de Compra</span>
+            <span>Pedidos</span>
         </button>
 
         <button
@@ -137,20 +167,20 @@
                     <circle cx="17.5" cy="17.5" r="2.5" />
                 </svg>
             </span>
-            <span>Verificador de Fracciones</span>
+            <span>Fracciones</span>
         </button>
 
         <button
             class="w-full flex items-center gap-3 px-4 py-[10px] font-barlow text-[14px] font-medium
 					no-underline transition-colors duration-150 border-l-2 text-left
-					{isActive('estadisticas')
+					{isActive('etiquetas')
                 ? 'bg-white/[0.12] text-white border-l-[#e11d48]'
                 : 'text-white/55 border-l-transparent hover:text-white hover:bg-white/[0.07]'}"
-            onclick={() => onNavigate("estadisticas")}
+            onclick={() => onNavigate("etiquetas")}
         >
             <span
                 class="w-[18px] h-[18px] shrink-0 flex"
-                style="color: {isActive('estadisticas')
+                style="color: {isActive('etiquetas')
                     ? '#e11d48'
                     : 'rgba(255,255,255,0.35)'}"
             >
@@ -162,12 +192,11 @@
                     stroke-linecap="round"
                     stroke-linejoin="round"
                 >
-                    <line x1="18" y1="20" x2="18" y2="10" />
-                    <line x1="12" y1="20" x2="12" y2="4" />
-                    <line x1="6" y1="20" x2="6" y2="14" />
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z" />
+                    <line x1="7" y1="7" x2="7.01" y2="7" />
                 </svg>
             </span>
-            <span>Estadísticas</span>
+            <span>Etiquetas</span>
         </button>
     </nav>
 

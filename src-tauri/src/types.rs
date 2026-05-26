@@ -206,3 +206,16 @@ pub struct ParseSeguimientosResult {
     pub valid_count: usize,
     pub error_count: usize,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArticuloEtiqueta {
+    pub numart: String,
+    pub desc: String,
+    pub codigo: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListArticulosEtiquetaResult {
+    pub articulos: Vec<ArticuloEtiqueta>,
+    pub next_page_token: String,
+}

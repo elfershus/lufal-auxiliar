@@ -144,10 +144,17 @@ export interface ArticuloFracciones {
 	fracciones: FraccionRecord[];
 }
 
+export interface SucursalEntry {
+	numalm: string;
+	letra: string;
+}
+
 export interface DbfPaths {
 	dbf_arts: string | null;
 	dbf_unidades: string | null;
 	dbf_docum: string | null;
+	dbf_cxc: string | null;
+	sucursales: SucursalEntry[];
 }
 
 export interface PeriodoStat {
@@ -162,6 +169,10 @@ export interface PeriodoStat {
 	remisiones_count: number;
 	notas_importe: number;
 	notas_count: number;
+	credito_importe: number;
+	credito_count: number;
+	abonos_importe: number;
+	abonos_count: number;
 }
 
 export interface EstadisticasResult {
@@ -170,6 +181,10 @@ export interface EstadisticasResult {
 	total_compras: number;
 	total_ventas_count: number;
 	total_compras_count: number;
+	total_credito: number;
+	total_credito_count: number;
+	total_abonos: number;
+	total_abonos_count: number;
 }
 
 export interface PairingRow {
@@ -225,4 +240,20 @@ export interface VerifFraccion {
 	niveles: VerifNivel[];
 	hayProblema: boolean;
 	nivelesConProblema: number[];
+}
+
+export interface ArticuloEtiqueta {
+	numart: string;
+	desc: string;
+	codigo: string;
+}
+
+export interface ListArticulosEtiquetaResult {
+	articulos: ArticuloEtiqueta[];
+	next_page_token: string;
+}
+
+export interface EstadisticasDosAniosResult {
+	actual: EstadisticasResult;
+	anterior: EstadisticasResult;
 }

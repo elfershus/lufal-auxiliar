@@ -104,6 +104,21 @@ async fn get_articulos(
 }
 
 #[tauri::command]
+async fn list_articulos_etiqueta(
+    grpc: State<'_, GrpcState>,
+    q: Option<String>,
+    page_token: Option<String>,
+) -> Result<ListArticulosEtiquetaResult, String> {
+    grpc.lock()
+        .await
+        .as_mut()
+        .ok_or_else(|| "Sin configuración".to_string())?
+        .list_articulos(q, page_token.unwrap_or_default())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn get_config_path() -> Option<String> {
     AppConfig::config_path().map(|p| p.display().to_string())
 }
@@ -132,6 +147,8 @@ struct DbfPaths {
     dbf_arts: Option<String>,
     dbf_unidades: Option<String>,
     dbf_docum: Option<String>,
+    dbf_cxc: Option<String>,
+    sucursales: Vec<config::SucursalConfig>,
 }
 
 #[tauri::command]
@@ -141,6 +158,8 @@ fn get_dbf_paths() -> DbfPaths {
         dbf_arts: cfg.as_ref().and_then(|c| c.dbf_arts.clone()),
         dbf_unidades: cfg.as_ref().and_then(|c| c.dbf_unidades.clone()),
         dbf_docum: cfg.as_ref().and_then(|c| c.dbf_docum.clone()),
+        dbf_cxc: cfg.as_ref().and_then(|c| c.dbf_cxc.clone()),
+        sucursales: cfg.as_ref().map(|c| c.sucursales.clone()).unwrap_or_default(),
     }
 }
 
@@ -159,7 +178,28 @@ fn save_dbf_docum(path: String) -> Result<(), String> {
     AppConfig::update_field("dbf_docum", &path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn save_dbf_cxc(path: String) -> Result<(), String> {
+    AppConfig::update_field("dbf_cxc", &path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn save_sucursales_map(mapping: Vec<config::SucursalConfig>) -> Result<(), String> {
+    AppConfig::update_sucursales(&mapping).map_err(|e| e.to_string())
+}
+
 // ── Estadísticas ───────────────────────────────────────────────
+
+fn numalm_to_branch_letter(numalm: &str, cfg: &Option<AppConfig>) -> Option<char> {
+    if let Some(c) = cfg {
+        if let Some(entry) = c.sucursales.iter().find(|s| s.numalm.trim() == numalm.trim()) {
+            return entry.letra.trim().chars().next();
+        }
+    }
+    numalm.trim().parse::<u32>().ok()
+        .filter(|&n| n >= 1)
+        .map(|n| (b'A' + (n - 1) as u8) as char)
+}
 
 #[derive(serde::Serialize)]
 struct PeriodoStat {
@@ -174,6 +214,10 @@ struct PeriodoStat {
     remisiones_count: u32,
     notas_importe: f64,
     notas_count: u32,
+    credito_importe: f64,
+    credito_count: u32,
+    abonos_importe: f64,
+    abonos_count: u32,
 }
 
 #[derive(serde::Serialize)]
@@ -183,75 +227,49 @@ struct EstadisticasResult {
     total_compras: f64,
     total_ventas_count: u32,
     total_compras_count: u32,
+    total_credito: f64,
+    total_credito_count: u32,
+    total_abonos: f64,
+    total_abonos_count: u32,
 }
 
-#[tauri::command]
-fn get_estadisticas_docum(
-    fecha_from: Option<String>,
-    fecha_to: Option<String>,
-) -> Result<EstadisticasResult, String> {
+#[derive(serde::Serialize)]
+struct EstadisticasDosAniosResult {
+    actual: EstadisticasResult,
+    anterior: EstadisticasResult,
+}
+
+fn compute_estadisticas(
+    docs: &[models::Documento],
+    cxc_records: &[models::Cxc],
+    from: chrono::NaiveDate,
+    to: chrono::NaiveDate,
+    branch_filter: Option<char>,
+) -> EstadisticasResult {
     use std::collections::HashMap;
-    use std::path::Path;
-
-    let cfg = AppConfig::load().ok();
-    let docum_path = cfg
-        .as_ref()
-        .and_then(|c| c.dbf_docum.as_deref())
-        .ok_or_else(|| "Archivo de documentos no configurado".to_string())?;
-
-    let from_date = fecha_from
-        .as_deref()
-        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
-    let to_date = fecha_to
-        .as_deref()
-        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
-
-    let documentos = dbf_reader::read_documentos(Path::new(docum_path), from_date, to_date)
-        .map_err(|e| e.to_string())?;
 
     let mut periodos_map: HashMap<String, PeriodoStat> = HashMap::new();
 
-    for doc in &documentos {
-        if doc.deleted_in_dbf || doc.status != 0 {
-            continue;
-        }
+    for doc in docs {
+        if doc.deleted_in_dbf || doc.status != 0 { continue; }
 
         let es_venta = matches!(doc.tipodoc.trim(), "R" | "F" | "N") && doc.formapago.trim() == "1";
         let es_compra = doc.tipodoc.trim() == "C";
+        if !es_venta && !es_compra { continue; }
 
-        if !es_venta && !es_compra {
-            continue;
-        }
-
-        let fecha = match doc.fechacapt {
-            Some(f) => f,
-            None => continue,
-        };
-
-        if let Some(from) = from_date {
-            if fecha < from {
-                continue;
-            }
-        }
-        if let Some(to) = to_date {
-            if fecha > to {
-                continue;
-            }
-        }
+        let fecha = match doc.fechacapt { Some(f) => f, None => continue };
+        if fecha < from || fecha > to { continue; }
 
         let periodo = fecha.format("%Y-%m").to_string();
-        let entry = periodos_map.entry(periodo.clone()).or_insert(PeriodoStat {
+        let entry = periodos_map.entry(periodo.clone()).or_insert_with(|| PeriodoStat {
             periodo,
-            ventas_importe: 0.0,
-            compras_importe: 0.0,
-            ventas_count: 0,
-            compras_count: 0,
-            facturas_importe: 0.0,
-            facturas_count: 0,
-            remisiones_importe: 0.0,
-            remisiones_count: 0,
-            notas_importe: 0.0,
-            notas_count: 0,
+            ventas_importe: 0.0, compras_importe: 0.0,
+            ventas_count: 0, compras_count: 0,
+            facturas_importe: 0.0, facturas_count: 0,
+            remisiones_importe: 0.0, remisiones_count: 0,
+            notas_importe: 0.0, notas_count: 0,
+            credito_importe: 0.0, credito_count: 0,
+            abonos_importe: 0.0, abonos_count: 0,
         });
 
         if es_venta {
@@ -269,20 +287,123 @@ fn get_estadisticas_docum(
         }
     }
 
+    // Acumular abonos CXC
+    for cxc in cxc_records {
+        if cxc.deleted_in_dbf || cxc.ca.trim() != "0" { continue; }
+        // Filtrar por sucursal: KEYDOCUM formato "F    C15573" → segundo token → primer char
+        if let Some(expected) = branch_filter {
+            let branch = cxc.keydocum.split_whitespace().nth(1).and_then(|s| s.chars().next());
+            if branch != Some(expected) { continue; }
+        }
+        let fecha = match cxc.fecha { Some(f) => f, None => continue };
+        if fecha < from || fecha > to { continue; }
+
+        let periodo = fecha.format("%Y-%m").to_string();
+        let entry = periodos_map.entry(periodo.clone()).or_insert_with(|| PeriodoStat {
+            periodo,
+            ventas_importe: 0.0, compras_importe: 0.0,
+            ventas_count: 0, compras_count: 0,
+            facturas_importe: 0.0, facturas_count: 0,
+            remisiones_importe: 0.0, remisiones_count: 0,
+            notas_importe: 0.0, notas_count: 0,
+            credito_importe: 0.0, credito_count: 0,
+            abonos_importe: 0.0, abonos_count: 0,
+        });
+        entry.abonos_importe += cxc.importe;
+        entry.abonos_count += 1;
+    }
+
     let mut periodos: Vec<PeriodoStat> = periodos_map.into_values().collect();
     periodos.sort_by(|a, b| a.periodo.cmp(&b.periodo));
 
-    let total_ventas: f64 = periodos.iter().map(|p| p.ventas_importe).sum();
-    let total_compras: f64 = periodos.iter().map(|p| p.compras_importe).sum();
-    let total_ventas_count: u32 = periodos.iter().map(|p| p.ventas_count).sum();
-    let total_compras_count: u32 = periodos.iter().map(|p| p.compras_count).sum();
-
-    Ok(EstadisticasResult {
+    EstadisticasResult {
+        total_ventas:       periodos.iter().map(|p| p.ventas_importe).sum(),
+        total_compras:      periodos.iter().map(|p| p.compras_importe).sum(),
+        total_ventas_count: periodos.iter().map(|p| p.ventas_count).sum(),
+        total_compras_count:periodos.iter().map(|p| p.compras_count).sum(),
+        total_credito:      periodos.iter().map(|p| p.credito_importe).sum(),
+        total_credito_count:periodos.iter().map(|p| p.credito_count).sum(),
+        total_abonos:       periodos.iter().map(|p| p.abonos_importe).sum(),
+        total_abonos_count: periodos.iter().map(|p| p.abonos_count).sum(),
         periodos,
-        total_ventas,
-        total_compras,
-        total_ventas_count,
-        total_compras_count,
+    }
+}
+
+#[tauri::command]
+fn get_estadisticas_docum(
+    fecha_from: Option<String>,
+    fecha_to: Option<String>,
+    numalm: Option<String>,
+) -> Result<EstadisticasResult, String> {
+    use std::path::Path;
+
+    let cfg = AppConfig::load().ok();
+    let docum_path = cfg
+        .as_ref()
+        .and_then(|c| c.dbf_docum.as_deref())
+        .ok_or_else(|| "Archivo de documentos no configurado".to_string())?;
+
+    let from_date = fecha_from
+        .as_deref()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+    let to_date = fecha_to
+        .as_deref()
+        .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+
+    let docs = dbf_reader::read_documentos(Path::new(docum_path), from_date, to_date)
+        .map_err(|e| e.to_string())?;
+
+    let branch_filter = numalm.as_deref().and_then(|n| numalm_to_branch_letter(n, &cfg));
+    let cxc_min = from_date.and_then(|d| {
+        use chrono::Datelike;
+        chrono::NaiveDate::from_ymd_opt(d.year() - 1, 1, 1)
+    });
+    let cxc_records = cfg.as_ref()
+        .and_then(|c| c.dbf_cxc.as_deref())
+        .and_then(|p| dbf_reader::read_cxc(std::path::Path::new(p), cxc_min).ok())
+        .unwrap_or_default();
+
+    let from = from_date.unwrap_or(chrono::NaiveDate::from_ymd_opt(1900, 1, 1).unwrap());
+    let to   = to_date.unwrap_or(chrono::NaiveDate::from_ymd_opt(9999, 12, 31).unwrap());
+
+    Ok(compute_estadisticas(&docs, &cxc_records, from, to, branch_filter))
+}
+
+#[tauri::command]
+fn get_estadisticas_dos_anios(
+    anio: i32,
+    numalm: Option<String>,
+) -> Result<EstadisticasDosAniosResult, String> {
+    use chrono::NaiveDate;
+    use std::path::Path;
+
+    let cfg = AppConfig::load().ok();
+    let docum_path = cfg
+        .as_ref()
+        .and_then(|c| c.dbf_docum.as_deref())
+        .ok_or_else(|| "Archivo de documentos no configurado".to_string())?;
+
+    let from_prev = NaiveDate::from_ymd_opt(anio - 1, 1, 1).unwrap();
+    let to_curr   = NaiveDate::from_ymd_opt(anio, 12, 31).unwrap();
+
+    // 1 sola lectura de DOCUM.DBF cubre ambos años
+    let docs = dbf_reader::read_documentos(Path::new(docum_path), Some(from_prev), Some(to_curr))
+        .map_err(|e| e.to_string())?;
+
+    // 1 sola lectura de CXC.DBF
+    let branch_filter = numalm.as_deref().and_then(|n| numalm_to_branch_letter(n, &cfg));
+    let cxc_min = NaiveDate::from_ymd_opt(anio - 2, 1, 1);
+    let cxc_records = cfg.as_ref()
+        .and_then(|c| c.dbf_cxc.as_deref())
+        .and_then(|p| dbf_reader::read_cxc(Path::new(p), cxc_min).ok())
+        .unwrap_or_default();
+
+    let from_curr = NaiveDate::from_ymd_opt(anio, 1, 1).unwrap();
+    let to_prev   = NaiveDate::from_ymd_opt(anio - 1, 12, 31).unwrap();
+
+    Ok(EstadisticasDosAniosResult {
+        actual:   compute_estadisticas(&docs, &cxc_records, from_curr, to_curr, branch_filter),
+        anterior: compute_estadisticas(&docs, &cxc_records, from_prev, to_prev, branch_filter),
     })
 }
 
@@ -554,6 +675,7 @@ pub fn run() {
             get_documento,
             get_proveedor_nombre,
             get_articulos,
+            list_articulos_etiqueta,
             buscar_seguimiento,
             get_config_path,
             check_config,
@@ -581,7 +703,10 @@ pub fn run() {
             parse_seguimientos_xlsx,
             import_seguimientos,
             save_dbf_docum,
+            save_dbf_cxc,
             get_estadisticas_docum,
+            get_estadisticas_dos_anios,
+            save_sucursales_map,
         ])
         .run(tauri::generate_context!())
         .expect("Error al iniciar la aplicación Tauri");

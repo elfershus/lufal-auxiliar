@@ -6,10 +6,11 @@
 	import SetupView from './views/SetupView.svelte';
 	import FraccionesView from './views/FraccionesView.svelte';
 	import EstadisticasView from './views/EstadisticasView.svelte';
+	import EtiquetasView from './views/EtiquetasView.svelte';
 	import { initClient } from './lib/grpc.js';
 	import { check } from '@tauri-apps/plugin-updater';
 
-	type View = 'ordenes' | 'detalle' | 'config' | 'fracciones' | 'estadisticas';
+	type View = 'ordenes' | 'detalle' | 'config' | 'fracciones' | 'estadisticas' | 'etiquetas';
 
 	// null = verificando actualización/configuración al inicio
 	let activeView = $state<View | null>(null);
@@ -35,7 +36,7 @@
 
 			const configured = await initClient();
 			needsSetup = !configured;
-			activeView = 'ordenes';
+			activeView = 'estadisticas';
 		})();
 	});
 
@@ -83,6 +84,8 @@
 			<FraccionesView onGoConfig={() => navigate('config')} />
 		{:else if activeView === 'estadisticas'}
 			<EstadisticasView onGoConfig={() => navigate('config')} />
+		{:else if activeView === 'etiquetas'}
+			<EtiquetasView />
 		{/if}
 	</main>
 {/if}

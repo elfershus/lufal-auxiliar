@@ -167,7 +167,7 @@
 				<div>
 					<p class="text-[11px] font-semibold tracking-[0.12em] uppercase text-white/40">Compras</p>
 					<h1 class="font-barlow-condensed text-[22px] font-bold text-white leading-none">
-						Órdenes de Compra
+						Pedidos
 					</h1>
 				</div>
 			</div>
