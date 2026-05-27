@@ -168,7 +168,10 @@ fn get_dbf_paths() -> DbfPaths {
         dbf_unidades: cfg.as_ref().and_then(|c| c.dbf_unidades.clone()),
         dbf_docum: cfg.as_ref().and_then(|c| c.dbf_docum.clone()),
         dbf_cxc: cfg.as_ref().and_then(|c| c.dbf_cxc.clone()),
-        sucursales: cfg.as_ref().map(|c| c.sucursales.clone()).unwrap_or_default(),
+        sucursales: cfg
+            .as_ref()
+            .map(|c| c.sucursales.clone())
+            .unwrap_or_default(),
     }
 }
 
@@ -201,11 +204,18 @@ fn save_sucursales_map(mapping: Vec<config::SucursalConfig>) -> Result<(), Strin
 
 fn numalm_to_branch_letter(numalm: &str, cfg: &Option<AppConfig>) -> Option<char> {
     if let Some(c) = cfg {
-        if let Some(entry) = c.sucursales.iter().find(|s| s.numalm.trim() == numalm.trim()) {
+        if let Some(entry) = c
+            .sucursales
+            .iter()
+            .find(|s| s.numalm.trim() == numalm.trim())
+        {
             return entry.letra.trim().chars().next();
         }
     }
-    numalm.trim().parse::<u32>().ok()
+    numalm
+        .trim()
+        .parse::<u32>()
+        .ok()
         .filter(|&n| n >= 1)
         .map(|n| (b'A' + (n - 1) as u8) as char)
 }
@@ -260,70 +270,132 @@ fn compute_estadisticas(
     let mut periodos_map: HashMap<String, PeriodoStat> = HashMap::new();
 
     for doc in docs {
-        if doc.deleted_in_dbf { continue; }
+        if doc.deleted_in_dbf {
+            continue;
+        }
 
         let tipodoc = doc.tipodoc.trim();
         let es_nota_venta = tipodoc == "N" && doc.formapago.trim() == "1";
-        let es_venta = (matches!(tipodoc, "R" | "F") && doc.formapago.trim() == "1") || es_nota_venta;
+        let es_venta =
+            (matches!(tipodoc, "R" | "F") && doc.formapago.trim() == "1") || es_nota_venta;
         let es_compra = tipodoc == "C";
-        if !es_venta && !es_compra { continue; }
+        if !es_venta && !es_compra {
+            continue;
+        }
+
+        // Excluir facturas que son de diario (FACTDIARIA = false)
+        if tipodoc == "F" && doc.factdiaria == Some(true) {
+            continue;
+        }
 
         // Notas de venta: excluir solo status 1; demás documentos: solo incluir status 0
-        let skip = if es_nota_venta { doc.status == 1 } else { doc.status != 0 };
-        if skip { continue; }
+        let skip = if es_nota_venta {
+            doc.status == 1
+        } else {
+            doc.status != 0
+        };
+        if skip {
+            continue;
+        }
 
-        let fecha = match doc.fechacapt { Some(f) => f, None => continue };
-        if fecha < from || fecha > to { continue; }
+        let fecha = match doc.fechacapt {
+            Some(f) => f,
+            None => continue,
+        };
+        if fecha < from || fecha > to {
+            continue;
+        }
 
         let periodo = fecha.format("%Y-%m").to_string();
-        let entry = periodos_map.entry(periodo.clone()).or_insert_with(|| PeriodoStat {
-            periodo,
-            ventas_importe: 0.0, compras_importe: 0.0,
-            ventas_count: 0, compras_count: 0,
-            facturas_importe: 0.0, facturas_count: 0,
-            remisiones_importe: 0.0, remisiones_count: 0,
-            notas_importe: 0.0, notas_count: 0,
-            credito_importe: 0.0, credito_count: 0,
-            abonos_importe: 0.0, abonos_count: 0,
-        });
+        let entry = periodos_map
+            .entry(periodo.clone())
+            .or_insert_with(|| PeriodoStat {
+                periodo,
+                ventas_importe: 0.0,
+                compras_importe: 0.0,
+                ventas_count: 0,
+                compras_count: 0,
+                facturas_importe: 0.0,
+                facturas_count: 0,
+                remisiones_importe: 0.0,
+                remisiones_count: 0,
+                notas_importe: 0.0,
+                notas_count: 0,
+                credito_importe: 0.0,
+                credito_count: 0,
+                abonos_importe: 0.0,
+                abonos_count: 0,
+            });
 
+        let total_doc = doc.importe - doc.descuento + doc.impuesto1 + doc.impuesto2;
         if es_venta {
-            entry.ventas_importe += doc.importe;
+            entry.ventas_importe += total_doc;
             entry.ventas_count += 1;
             match tipodoc {
-                "F" => { entry.facturas_importe += doc.importe; entry.facturas_count += 1; }
-                "R" => { entry.remisiones_importe += doc.importe; entry.remisiones_count += 1; }
-                "N" => { entry.notas_importe += doc.importe; entry.notas_count += 1; }
+                "F" => {
+                    entry.facturas_importe += total_doc;
+                    entry.facturas_count += 1;
+                }
+                "R" => {
+                    entry.remisiones_importe += total_doc;
+                    entry.remisiones_count += 1;
+                }
+                "N" => {
+                    entry.notas_importe += total_doc;
+                    entry.notas_count += 1;
+                }
                 _ => {}
             }
         } else {
-            entry.compras_importe += doc.importe;
+            entry.compras_importe += total_doc;
             entry.compras_count += 1;
         }
     }
 
     // Acumular abonos CXC
     for cxc in cxc_records {
-        if cxc.deleted_in_dbf || cxc.ca.trim() != "0" { continue; }
+        if cxc.deleted_in_dbf || cxc.ca.trim() != "0" {
+            continue;
+        }
         // Filtrar por sucursal: KEYDOCUM formato "F    C15573" → segundo token → primer char
         if let Some(expected) = branch_filter {
-            let branch = cxc.keydocum.split_whitespace().nth(1).and_then(|s| s.chars().next());
-            if branch != Some(expected) { continue; }
+            let branch = cxc
+                .keydocum
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.chars().next());
+            if branch != Some(expected) {
+                continue;
+            }
         }
-        let fecha = match cxc.fecha { Some(f) => f, None => continue };
-        if fecha < from || fecha > to { continue; }
+        let fecha = match cxc.fecha {
+            Some(f) => f,
+            None => continue,
+        };
+        if fecha < from || fecha > to {
+            continue;
+        }
 
         let periodo = fecha.format("%Y-%m").to_string();
-        let entry = periodos_map.entry(periodo.clone()).or_insert_with(|| PeriodoStat {
-            periodo,
-            ventas_importe: 0.0, compras_importe: 0.0,
-            ventas_count: 0, compras_count: 0,
-            facturas_importe: 0.0, facturas_count: 0,
-            remisiones_importe: 0.0, remisiones_count: 0,
-            notas_importe: 0.0, notas_count: 0,
-            credito_importe: 0.0, credito_count: 0,
-            abonos_importe: 0.0, abonos_count: 0,
-        });
+        let entry = periodos_map
+            .entry(periodo.clone())
+            .or_insert_with(|| PeriodoStat {
+                periodo,
+                ventas_importe: 0.0,
+                compras_importe: 0.0,
+                ventas_count: 0,
+                compras_count: 0,
+                facturas_importe: 0.0,
+                facturas_count: 0,
+                remisiones_importe: 0.0,
+                remisiones_count: 0,
+                notas_importe: 0.0,
+                notas_count: 0,
+                credito_importe: 0.0,
+                credito_count: 0,
+                abonos_importe: 0.0,
+                abonos_count: 0,
+            });
         entry.abonos_importe += cxc.importe;
         entry.abonos_count += 1;
     }
@@ -332,13 +404,13 @@ fn compute_estadisticas(
     periodos.sort_by(|a, b| a.periodo.cmp(&b.periodo));
 
     EstadisticasResult {
-        total_ventas:       periodos.iter().map(|p| p.ventas_importe).sum(),
-        total_compras:      periodos.iter().map(|p| p.compras_importe).sum(),
+        total_ventas: periodos.iter().map(|p| p.ventas_importe).sum(),
+        total_compras: periodos.iter().map(|p| p.compras_importe).sum(),
         total_ventas_count: periodos.iter().map(|p| p.ventas_count).sum(),
-        total_compras_count:periodos.iter().map(|p| p.compras_count).sum(),
-        total_credito:      periodos.iter().map(|p| p.credito_importe).sum(),
-        total_credito_count:periodos.iter().map(|p| p.credito_count).sum(),
-        total_abonos:       periodos.iter().map(|p| p.abonos_importe).sum(),
+        total_compras_count: periodos.iter().map(|p| p.compras_count).sum(),
+        total_credito: periodos.iter().map(|p| p.credito_importe).sum(),
+        total_credito_count: periodos.iter().map(|p| p.credito_count).sum(),
+        total_abonos: periodos.iter().map(|p| p.abonos_importe).sum(),
         total_abonos_count: periodos.iter().map(|p| p.abonos_count).sum(),
         periodos,
     }
@@ -368,20 +440,29 @@ fn get_estadisticas_docum(
     let docs = dbf_reader::read_documentos(Path::new(docum_path), from_date, to_date)
         .map_err(|e| e.to_string())?;
 
-    let branch_filter = numalm.as_deref().and_then(|n| numalm_to_branch_letter(n, &cfg));
+    let branch_filter = numalm
+        .as_deref()
+        .and_then(|n| numalm_to_branch_letter(n, &cfg));
     let cxc_min = from_date.and_then(|d| {
         use chrono::Datelike;
         chrono::NaiveDate::from_ymd_opt(d.year() - 1, 1, 1)
     });
-    let cxc_records = cfg.as_ref()
+    let cxc_records = cfg
+        .as_ref()
         .and_then(|c| c.dbf_cxc.as_deref())
         .and_then(|p| dbf_reader::read_cxc(std::path::Path::new(p), cxc_min).ok())
         .unwrap_or_default();
 
     let from = from_date.unwrap_or(chrono::NaiveDate::from_ymd_opt(1900, 1, 1).unwrap());
-    let to   = to_date.unwrap_or(chrono::NaiveDate::from_ymd_opt(9999, 12, 31).unwrap());
+    let to = to_date.unwrap_or(chrono::NaiveDate::from_ymd_opt(9999, 12, 31).unwrap());
 
-    Ok(compute_estadisticas(&docs, &cxc_records, from, to, branch_filter))
+    Ok(compute_estadisticas(
+        &docs,
+        &cxc_records,
+        from,
+        to,
+        branch_filter,
+    ))
 }
 
 #[tauri::command]
@@ -400,7 +481,7 @@ fn get_estadisticas_dos_anios(
         .ok_or_else(|| "Archivo de documentos no configurado".to_string())?;
 
     let from_prev = NaiveDate::from_ymd_opt(anio - 1, 1, 1).unwrap();
-    let to_curr   = NaiveDate::from_ymd_opt(anio, 12, 31).unwrap();
+    let to_curr = NaiveDate::from_ymd_opt(anio, 12, 31).unwrap();
 
     // Caché: re-leer solo si el archivo cambió (mtime) o cambió el año
     let docs = {
@@ -416,8 +497,9 @@ fn get_estadisticas_dos_anios(
         if hit {
             cache.as_ref().unwrap().docs.clone()
         } else {
-            let docs = dbf_reader::read_documentos(Path::new(docum_path), Some(from_prev), Some(to_curr))
-                .map_err(|e| e.to_string())?;
+            let docs =
+                dbf_reader::read_documentos(Path::new(docum_path), Some(from_prev), Some(to_curr))
+                    .map_err(|e| e.to_string())?;
             *cache = Some(DocumCacheEntry {
                 path: docum_path.to_string(),
                 mtime,
@@ -429,18 +511,21 @@ fn get_estadisticas_dos_anios(
     };
 
     // 1 sola lectura de CXC.DBF
-    let branch_filter = numalm.as_deref().and_then(|n| numalm_to_branch_letter(n, &cfg));
+    let branch_filter = numalm
+        .as_deref()
+        .and_then(|n| numalm_to_branch_letter(n, &cfg));
     let cxc_min = NaiveDate::from_ymd_opt(anio - 2, 1, 1);
-    let cxc_records = cfg.as_ref()
+    let cxc_records = cfg
+        .as_ref()
         .and_then(|c| c.dbf_cxc.as_deref())
         .and_then(|p| dbf_reader::read_cxc(Path::new(p), cxc_min).ok())
         .unwrap_or_default();
 
     let from_curr = NaiveDate::from_ymd_opt(anio, 1, 1).unwrap();
-    let to_prev   = NaiveDate::from_ymd_opt(anio - 1, 12, 31).unwrap();
+    let to_prev = NaiveDate::from_ymd_opt(anio - 1, 12, 31).unwrap();
 
     Ok(EstadisticasDosAniosResult {
-        actual:   compute_estadisticas(&docs, &cxc_records, from_curr, to_curr, branch_filter),
+        actual: compute_estadisticas(&docs, &cxc_records, from_curr, to_curr, branch_filter),
         anterior: compute_estadisticas(&docs, &cxc_records, from_prev, to_prev, branch_filter),
     })
 }
@@ -470,10 +555,10 @@ fn get_fracciones_init_data() -> Result<FraccionesInitData, String> {
         .and_then(|c| c.dbf_unidades.as_deref())
         .ok_or_else(|| "Archivo de fracciones no configurado".to_string())?;
 
-    let articulos_raw = dbf_reader::read_articulos(Path::new(arts_path))
-        .map_err(|e| e.to_string())?;
-    let unidades = dbf_reader::read_unidades(Path::new(unidades_path))
-        .map_err(|e| e.to_string())?;
+    let articulos_raw =
+        dbf_reader::read_articulos(Path::new(arts_path)).map_err(|e| e.to_string())?;
+    let unidades =
+        dbf_reader::read_unidades(Path::new(unidades_path)).map_err(|e| e.to_string())?;
 
     let arts_map: HashMap<String, &models::Articulo> = articulos_raw
         .iter()
@@ -558,7 +643,12 @@ fn get_fracciones_init_data() -> Result<FraccionesInitData, String> {
     let etiquetas = db::get_all_etiquetas().unwrap_or_default();
     let seguimientos = db::get_all_seguimientos().unwrap_or_default();
 
-    Ok(FraccionesInitData { fracciones, articulos, etiquetas, seguimientos })
+    Ok(FraccionesInitData {
+        fracciones,
+        articulos,
+        etiquetas,
+        seguimientos,
+    })
 }
 
 #[tauri::command]
@@ -568,17 +658,12 @@ fn save_fraccion_pairing(
     numart_destino: String,
 ) -> Result<(), String> {
     db::add_seguimiento(&numart_origen, &unidad_fraccion).map_err(|e| e.to_string())?;
-    db::upsert_pairing(&numart_origen, &unidad_fraccion, &numart_destino)
-        .map_err(|e| e.to_string())
+    db::upsert_pairing(&numart_origen, &unidad_fraccion, &numart_destino).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn delete_fraccion_pairing(
-    numart_origen: String,
-    unidad_fraccion: String,
-) -> Result<(), String> {
-    db::delete_pairing(&numart_origen, &unidad_fraccion)
-        .map_err(|e| e.to_string())
+fn delete_fraccion_pairing(numart_origen: String, unidad_fraccion: String) -> Result<(), String> {
+    db::delete_pairing(&numart_origen, &unidad_fraccion).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -644,7 +729,10 @@ fn add_seguimiento_fraccion(numart_origen: String, unidad_fraccion: String) -> R
 }
 
 #[tauri::command]
-fn delete_seguimiento_fraccion(numart_origen: String, unidad_fraccion: String) -> Result<(), String> {
+fn delete_seguimiento_fraccion(
+    numart_origen: String,
+    unidad_fraccion: String,
+) -> Result<(), String> {
     db::delete_seguimiento(&numart_origen, &unidad_fraccion).map_err(|e| e.to_string())
 }
 

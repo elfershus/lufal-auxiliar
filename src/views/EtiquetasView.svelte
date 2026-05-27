@@ -107,10 +107,8 @@
 						format: 'CODE128',
 						width: 2,
 						height: 50,
-						displayValue: true,
-						fontSize: 11,
-						margin: 0,
-						textMargin: 2
+						displayValue: false,
+						margin: 0
 					});
 					barcodeSvg = svg.outerHTML;
 				} catch {
