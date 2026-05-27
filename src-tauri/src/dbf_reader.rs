@@ -252,13 +252,6 @@ pub fn read_documentos(
             uuid: c!("UUID"),
             deleted_in_dbf,
         });
-        {
-            let d = result.last().unwrap();
-            debug!(row = i, tipodoc = %d.tipodoc, numdoc = %d.numdoc,
-                   status = d.status, fecha = ?d.fecha, importe = d.importe,
-                   numcli = %d.numcli, deleted = d.deleted_in_dbf,
-                   "dbf_reader: documento leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: DOCUM.DBF completo");
@@ -314,13 +307,6 @@ pub fn read_movimientos(path: &Path) -> Result<Vec<Movimiento>> {
             pendcanc: n!("PENDCANC"),
             deleted_in_dbf,
         });
-        {
-            let m = result.last().unwrap();
-            debug!(row = i, tipodoc = %m.tipodoc, numdoc = %m.numdoc,
-                   numpar = %m.numpar, numart = %m.numart, cant = m.cant,
-                   precio = m.precio, deleted = m.deleted_in_dbf,
-                   "dbf_reader: movimiento leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: MOVIM.DBF completo");
@@ -380,13 +366,6 @@ pub fn read_articulos(path: &Path) -> Result<Vec<Articulo>> {
             clavesat: c!("CLAVESAT"),
             deleted_in_dbf,
         });
-        {
-            let a = result.last().unwrap();
-            debug!(row = i, numart = %a.numart, desc = %a.desc,
-                   precio1 = a.precio1, activo = ?a.activo,
-                   deleted = a.deleted_in_dbf,
-                   "dbf_reader: artículo leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: ARTS.DBF completo");
@@ -455,12 +434,6 @@ pub fn read_proveedores(path: &Path) -> Result<Vec<Proveedor>> {
             idregimen: c!("IDREGIMEN"),
             deleted_in_dbf,
         });
-        {
-            let p = result.last().unwrap();
-            debug!(row = i, numprov = %p.numprov, nomprov = %p.nomprov,
-                   rfc = %p.rfc, deleted = p.deleted_in_dbf,
-                   "dbf_reader: proveedor leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: PROVEDOR.DBF completo");
@@ -545,12 +518,6 @@ pub fn read_clientes(path: &Path) -> Result<Vec<Cliente>> {
             idregimen:  c!("IDREGIMEN"),
             deleted_in_dbf,
         });
-        {
-            let cl = result.last().unwrap();
-            debug!(row = i, numcli = %cl.numcli, nomcli = %cl.nomcli,
-                   rfc = %cl.rfc, deleted = cl.deleted_in_dbf,
-                   "dbf_reader: cliente leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: CLIENTES.DBF completo");
@@ -598,12 +565,6 @@ pub fn read_almacenes(path: &Path) -> Result<Vec<Almacen>> {
             cp:        c!("CP"),
             deleted_in_dbf,
         });
-        {
-            let a = result.last().unwrap();
-            debug!(row = i, numalm = %a.numalm, nomalm = %a.nomalm,
-                   ciudad = %a.ciudad, deleted = a.deleted_in_dbf,
-                   "dbf_reader: almacén leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: ALMACEN.DBF completo");
@@ -643,12 +604,6 @@ pub fn read_multialm(path: &Path) -> Result<Vec<Multialm>> {
             ubica:      c!("UBICA"),
             deleted_in_dbf,
         });
-        {
-            let m = result.last().unwrap();
-            debug!(row = i, numart = %m.numart, numalm = %m.numalm,
-                   existencia = m.existencia, deleted = m.deleted_in_dbf,
-                   "dbf_reader: multialm leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: MULTIALM.DBF completo");
@@ -704,13 +659,6 @@ pub fn read_minv(path: &Path) -> Result<Vec<Minv>> {
             fechahora: c!("FECHAHORA"),
             deleted_in_dbf,
         });
-        {
-            let m = result.last().unwrap();
-            debug!(row = i, tipodoc = %m.tipodoc, numdoc = %m.numdoc,
-                   numpar = %m.numpar, numart = %m.numart, cant = m.cant,
-                   numalm = %m.numalm, deleted = m.deleted_in_dbf,
-                   "dbf_reader: minv leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: MINV.DBF completo");
@@ -750,11 +698,6 @@ pub fn read_concinv(path: &Path) -> Result<Vec<Concinv>> {
             sigfolio: c!("SIGFOLIO"),
             deleted_in_dbf,
         });
-        {
-            let r = result.last().unwrap();
-            debug!(row = i, conc = %r.conc, desc = %r.desc,
-                   deleted = r.deleted_in_dbf, "dbf_reader: concinv leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: CONCINV.DBF completo");
@@ -797,11 +740,6 @@ pub fn read_conccxc(path: &Path) -> Result<Vec<Conccxc>> {
             obligfolio: l!("OBLIGFOLIO"),
             deleted_in_dbf,
         });
-        {
-            let r = result.last().unwrap();
-            debug!(row = i, conc = %r.conc, desc = %r.desc,
-                   deleted = r.deleted_in_dbf, "dbf_reader: conccxc leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: ConCxc.DBF completo");
@@ -867,11 +805,6 @@ pub fn read_cxc(path: &Path, min_date: Option<chrono::NaiveDate>) -> Result<Vec<
             pagodigrel: c!("PAGODIGREL"),
             deleted_in_dbf,
         });
-        {
-            let r = result.last().unwrap();
-            debug!(row = i, keycxc = %r.keycxc, numcli = %r.numcli,
-                   saldo = r.saldo, deleted = r.deleted_in_dbf, "dbf_reader: cxc leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: Cxc.DBF completo");
@@ -914,12 +847,6 @@ pub fn read_unidades(path: &Path) -> Result<Vec<Unidad>> {
             preciopub: n!("PRECIOPUB"),
             deleted_in_dbf,
         });
-        {
-            let u = result.last().unwrap();
-            debug!(row = i, numart = %u.numart, unidad = %u.unidad,
-                   equiv1 = u.equiv1, equiv2 = u.equiv2, deleted = u.deleted_in_dbf,
-                   "dbf_reader: unidad leída");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: Unidades.DBF completo");
@@ -969,11 +896,6 @@ pub fn read_conccaja(path: &Path) -> Result<Vec<Conccaja>> {
             provpago:   n!("PROVPAGO"),
             deleted_in_dbf,
         });
-        {
-            let r = result.last().unwrap();
-            debug!(row = i, tipodoc = %r.tipodoc, desc = %r.desc,
-                   deleted = r.deleted_in_dbf, "dbf_reader: conccaja leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: ConcCaja.DBF completo");
@@ -1029,11 +951,6 @@ pub fn read_cortes(path: &Path) -> Result<Vec<Corte>> {
             modificado: l!("MODIFICADO"),
             deleted_in_dbf,
         });
-        {
-            let r = result.last().unwrap();
-            debug!(row = i, corte = %r.corte, numalm = %r.numalm,
-                   deleted = r.deleted_in_dbf, "dbf_reader: corte leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: cortes2.dbf completo");
@@ -1087,11 +1004,6 @@ pub fn read_caja(path: &Path) -> Result<Vec<Caja>> {
             refer:    c!("REFER"),
             deleted_in_dbf,
         });
-        {
-            let r = result.last().unwrap();
-            debug!(row = i, corte = %r.corte, tipodoc = %r.tipodoc, numdoc = %r.numdoc,
-                   deleted = r.deleted_in_dbf, "dbf_reader: caja leído");
-        }
     }
 
     tracing::info!(count = result.len(), "dbf_reader: caja.dbf completo");

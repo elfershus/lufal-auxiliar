@@ -17,6 +17,15 @@ use tokio::sync::Mutex;
 // Estado compartido: None si aún no hay configuración
 type GrpcState = Arc<Mutex<Option<GrpcClient>>>;
 
+// Caché de documentos DBF — invalida cuando cambia el mtime o el año solicitado
+struct DocumCacheEntry {
+    path: String,
+    mtime: std::time::SystemTime,
+    anio: i32,
+    docs: Vec<models::Documento>,
+}
+struct DocumState(std::sync::Mutex<Option<DocumCacheEntry>>);
+
 // ── Comandos Tauri ─────────────────────────────────────────────
 
 #[tauri::command]
@@ -377,6 +386,7 @@ fn get_estadisticas_docum(
 
 #[tauri::command]
 fn get_estadisticas_dos_anios(
+    state: State<'_, DocumState>,
     anio: i32,
     numalm: Option<String>,
 ) -> Result<EstadisticasDosAniosResult, String> {
@@ -392,9 +402,31 @@ fn get_estadisticas_dos_anios(
     let from_prev = NaiveDate::from_ymd_opt(anio - 1, 1, 1).unwrap();
     let to_curr   = NaiveDate::from_ymd_opt(anio, 12, 31).unwrap();
 
-    // 1 sola lectura de DOCUM.DBF cubre ambos años
-    let docs = dbf_reader::read_documentos(Path::new(docum_path), Some(from_prev), Some(to_curr))
-        .map_err(|e| e.to_string())?;
+    // Caché: re-leer solo si el archivo cambió (mtime) o cambió el año
+    let docs = {
+        let mtime = std::fs::metadata(docum_path)
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+
+        let mut cache = state.0.lock().unwrap();
+        let hit = cache.as_ref().map_or(false, |c| {
+            c.path == docum_path && c.mtime == mtime && c.anio == anio
+        });
+
+        if hit {
+            cache.as_ref().unwrap().docs.clone()
+        } else {
+            let docs = dbf_reader::read_documentos(Path::new(docum_path), Some(from_prev), Some(to_curr))
+                .map_err(|e| e.to_string())?;
+            *cache = Some(DocumCacheEntry {
+                path: docum_path.to_string(),
+                mtime,
+                anio,
+                docs: docs.clone(),
+            });
+            docs
+        }
+    };
 
     // 1 sola lectura de CXC.DBF
     let branch_filter = numalm.as_deref().and_then(|n| numalm_to_branch_letter(n, &cfg));
@@ -673,6 +705,7 @@ pub fn run() {
             // so it cannot be created here in the sync setup() callback.
             let grpc_state: GrpcState = Arc::new(Mutex::new(None));
             app.manage(grpc_state);
+            app.manage(DocumState(std::sync::Mutex::new(None)));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
