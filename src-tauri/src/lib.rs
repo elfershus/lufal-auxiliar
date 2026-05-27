@@ -354,7 +354,7 @@ fn compute_estadisticas(
 
     // Acumular abonos CXC
     for cxc in cxc_records {
-        if cxc.deleted_in_dbf || cxc.ca.trim() != "0" {
+        if cxc.deleted_in_dbf || cxc.ca.trim() != "1" {
             continue;
         }
         // Filtrar por sucursal: KEYDOCUM formato "F    C15573" → segundo token → primer char
