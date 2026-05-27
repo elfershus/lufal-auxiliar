@@ -251,11 +251,17 @@ fn compute_estadisticas(
     let mut periodos_map: HashMap<String, PeriodoStat> = HashMap::new();
 
     for doc in docs {
-        if doc.deleted_in_dbf || doc.status != 0 { continue; }
+        if doc.deleted_in_dbf { continue; }
 
-        let es_venta = matches!(doc.tipodoc.trim(), "R" | "F" | "N") && doc.formapago.trim() == "1";
-        let es_compra = doc.tipodoc.trim() == "C";
+        let tipodoc = doc.tipodoc.trim();
+        let es_nota_venta = tipodoc == "N" && doc.formapago.trim() == "1";
+        let es_venta = (matches!(tipodoc, "R" | "F") && doc.formapago.trim() == "1") || es_nota_venta;
+        let es_compra = tipodoc == "C";
         if !es_venta && !es_compra { continue; }
+
+        // Notas de venta: excluir solo status 1; demás documentos: solo incluir status 0
+        let skip = if es_nota_venta { doc.status == 1 } else { doc.status != 0 };
+        if skip { continue; }
 
         let fecha = match doc.fechacapt { Some(f) => f, None => continue };
         if fecha < from || fecha > to { continue; }
@@ -275,7 +281,7 @@ fn compute_estadisticas(
         if es_venta {
             entry.ventas_importe += doc.importe;
             entry.ventas_count += 1;
-            match doc.tipodoc.trim() {
+            match tipodoc {
                 "F" => { entry.facturas_importe += doc.importe; entry.facturas_count += 1; }
                 "R" => { entry.remisiones_importe += doc.importe; entry.remisiones_count += 1; }
                 "N" => { entry.notas_importe += doc.importe; entry.notas_count += 1; }

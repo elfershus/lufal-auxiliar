@@ -29,6 +29,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
+
 # ── Configuración ──────────────────────────────────────────────────────────
 SSH_ALIAS   = "cloud-api"                     # alias de ~/.ssh/config
 DEPLOY_PATH = "/var/www/updates"              # directorio en el servidor

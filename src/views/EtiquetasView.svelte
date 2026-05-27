@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount } from 'svelte';
 	import JsBarcode from 'jsbarcode';
 	import { listArticulosEtiqueta } from '../lib/grpc.js';
 	import type { ArticuloEtiqueta } from '../lib/types.js';
@@ -89,20 +89,21 @@
 	}
 
 	// ── Impresión ──────────────────────────────────────────────
-	async function imprimir() {
-		await tick();
-		window.print();
+	function escapeHtml(s: string): string {
+		return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 	}
 
-	$effect(() => {
-		void cola;
-		tick().then(() => {
-			const svgs = document.querySelectorAll<SVGElement>('#print-area svg[data-codigo]');
-			svgs.forEach((svg) => {
-				const codigo = svg.getAttribute('data-codigo') ?? '';
-				if (!codigo) return;
+	function imprimir() {
+		const items = cola.flatMap((item) =>
+			Array.from({ length: item.cantidad }, () => item.articulo)
+		);
+
+		const labels = items.map((art) => {
+			let barcodeSvg = '';
+			if (art.codigo) {
+				const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 				try {
-					JsBarcode(svg, codigo, {
+					JsBarcode(svg, art.codigo, {
 						format: 'CODE128',
 						width: 2,
 						height: 50,
@@ -111,30 +112,41 @@
 						margin: 0,
 						textMargin: 2
 					});
+					barcodeSvg = svg.outerHTML;
 				} catch {
 					// código inválido para Code128
 				}
-			});
+			}
+			return `<div class="label-page">
+				${barcodeSvg ? `<div class="label-barcode">${barcodeSvg}</div>` : ''}
+				<div class="label-numart">${escapeHtml(art.numart)}</div>
+				<div class="label-desc">${escapeHtml(art.desc)}</div>
+			</div>`;
 		});
-	});
-</script>
 
-<!-- ── Área de impresión (oculta en pantalla) ─────────────── -->
-<div id="print-area">
-	{#each cola as item}
-		{#each { length: item.cantidad } as _}
-			<div class="label-page">
-				<div class="label-numart">{item.articulo.numart}</div>
-				<div class="label-desc">{item.articulo.desc}</div>
-				{#if item.articulo.codigo}
-					<div class="label-barcode">
-						<svg data-codigo={item.articulo.codigo}></svg>
-					</div>
-				{/if}
-			</div>
-		{/each}
-	{/each}
-</div>
+		const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+			* { box-sizing: border-box; margin: 0; padding: 0; }
+			@page { size: 90mm auto; margin: 3mm; }
+			.label-page { page-break-after: always; break-after: page; width: 84mm; padding: 2mm; font-family: monospace, sans-serif; }
+			.label-barcode { width: 100%; margin-bottom: 2mm; }
+			.label-barcode svg { width: 100%; height: auto; }
+			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
+			.label-desc { font-size: 9pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		</style></head><body>${labels.join('')}</body></html>`;
+
+		const iframe = document.createElement('iframe');
+		iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;top:0;left:0;';
+		document.body.appendChild(iframe);
+
+		const doc = iframe.contentDocument!;
+		doc.open();
+		doc.write(html);
+		doc.close();
+
+		iframe.contentWindow!.print();
+		setTimeout(() => document.body.removeChild(iframe), 2000);
+	}
+</script>
 
 <!-- ── Layout principal ──────────────────────────────────── -->
 <div class="view-root">
@@ -905,55 +917,4 @@
 		color: #f87171;
 	}
 
-	/* ── Print area (screen: hidden) ─────────────────────── */
-	#print-area {
-		display: none;
-	}
-
-	/* ── Print styles ────────────────────────────────────── */
-	@media print {
-		:global(body > *) {
-			display: none !important;
-		}
-		:global(#print-area) {
-			display: block !important;
-		}
-
-		@page {
-			size: 90mm auto;
-			margin: 3mm;
-		}
-
-		:global(.label-page) {
-			page-break-after: always;
-			break-after: page;
-			width: 84mm;
-			padding: 2mm;
-			font-family: monospace, sans-serif;
-			box-sizing: border-box;
-		}
-
-		:global(.label-numart) {
-			font-size: 14pt;
-			font-weight: bold;
-			letter-spacing: 0.05em;
-			margin-bottom: 1mm;
-		}
-
-		:global(.label-desc) {
-			font-size: 9pt;
-			line-height: 1.3;
-			margin-bottom: 2mm;
-			word-wrap: break-word;
-		}
-
-		:global(.label-barcode) {
-			width: 100%;
-		}
-
-		:global(.label-barcode svg) {
-			width: 100%;
-			height: auto;
-		}
-	}
 </style>

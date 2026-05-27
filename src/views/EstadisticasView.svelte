@@ -319,7 +319,7 @@
 		</div>
 	</div>
 
-	<div class="px-4 py-4 md:px-6 max-w-4xl space-y-3">
+	<div class="px-4 py-4 md:px-6 space-y-3">
 
 		{#if sinArchivo}
 			<div class="bg-surface rounded p-8 border border-slate-200 flex flex-col items-center text-center animate-fadeSlide">
