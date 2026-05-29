@@ -219,3 +219,31 @@ pub struct ListArticulosEtiquetaResult {
     pub articulos: Vec<ArticuloEtiqueta>,
     pub next_page_token: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventarioMesStat {
+    pub mes: String,
+    pub saldo_inicial: f64,
+    pub entradas: f64,
+    pub salidas: f64,
+    pub saldo_final: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventarioAnioResult {
+    pub meses: Vec<InventarioMesStat>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CxcMensualMesStat {
+    pub mes: String,
+    pub saldo_inicial: f64,
+    pub cargos: f64,
+    pub abonos: f64,
+    pub saldo_final: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CxcMensualAnioResult {
+    pub meses: Vec<CxcMensualMesStat>,
+}

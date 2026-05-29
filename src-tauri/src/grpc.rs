@@ -14,8 +14,8 @@ pub mod proto {
 use proto::vfp_sync_service_client::VfpSyncServiceClient;
 use proto::{
     BuscarComprasRequest, BuscarRemisionesRequest, GetArticuloRequest,
-    GetDocumentoRequest, GetProveedorRequest, ListAlmacenesRequest, ListArticulosRequest,
-    ListDocumentosRequest,
+    GetDocumentoRequest, GetEstadisticasMensualesRequest, GetProveedorRequest,
+    ListAlmacenesRequest, ListArticulosRequest, ListDocumentosRequest,
 };
 
 // ── Interceptor de API key ─────────────────────────────────────
@@ -256,6 +256,71 @@ impl GrpcClient {
             .collect();
 
         Ok(SeguimientoResult { compras, remisiones })
+    }
+
+    // ── Estadísticas Inventario Detalle ───────────────────────
+
+    pub async fn get_estadisticas_inventario_detalle(
+        &mut self,
+        numalm: Option<String>,
+    ) -> Result<InventarioAnioResult> {
+        let req = GetEstadisticasMensualesRequest { numalm };
+        let resp = self
+            .client
+            .get_estadisticas_inventario_detalle(req)
+            .await?;
+        let meses = resp
+            .into_inner()
+            .meses
+            .into_iter()
+            .map(|m| {
+                let (si, ent, sal, sf) = m.almacenes.iter().fold(
+                    (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64),
+                    |(si, ent, sal, sf), a| {
+                        (si + a.saldo_inicial, ent + a.entradas, sal + a.salidas, sf + a.saldo_final)
+                    },
+                );
+                InventarioMesStat {
+                    mes: m.mes,
+                    saldo_inicial: si,
+                    entradas: ent,
+                    salidas: sal,
+                    saldo_final: sf,
+                }
+            })
+            .collect();
+        Ok(InventarioAnioResult { meses })
+    }
+
+    // ── Estadísticas CXC Mensual ───────────────────────────────
+
+    pub async fn get_estadisticas_cxc_mensual(
+        &mut self,
+        numalm: Option<String>,
+    ) -> Result<CxcMensualAnioResult> {
+        let req = GetEstadisticasMensualesRequest { numalm };
+        let resp = self.client.get_estadisticas_cxc_mensual(req).await?;
+        let meses = resp
+            .into_inner()
+            .meses
+            .into_iter()
+            .map(|m| {
+                let (si, car, abo, sf) = m.almacenes.iter().fold(
+                    (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64),
+                    |(si, car, abo, sf), a| {
+                        (si + a.saldo_inicial, car + a.cargos, abo + a.abonos, sf + a.saldo_final)
+                    },
+                );
+                CxcMensualMesStat {
+                    mes: m.mes,
+                    saldo_inicial: si,
+                    cargos: car,
+                    abonos: abo,
+                    saldo_final: sf,
+                }
+            })
+            .collect();
+        Ok(CxcMensualAnioResult { meses })
     }
 }
 

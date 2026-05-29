@@ -4,10 +4,10 @@
 		Chart, BarController, BarElement,
 		CategoryScale, LinearScale, Tooltip, Legend
 	} from 'chart.js';
-	import { getEstadisticasDosAnios } from '../lib/dbf.js';
+	import { getEstadisticasDosAnios, getEstadisticasInventarioDetalle, getEstadisticasCxcMensual } from '../lib/dbf.js';
 	import { appConfig } from '../lib/config.svelte.js';
 	import { formatMXN } from '../lib/utils.js';
-	import type { EstadisticasResult, PeriodoStat } from '../lib/types.js';
+	import type { EstadisticasResult, PeriodoStat, InventarioAnioResult, CxcMensualAnioResult, InventarioMesStat, CxcMensualMesStat } from '../lib/types.js';
 
 	Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -23,11 +23,13 @@
 	const anioActual = hoy.getFullYear();
 	const mesActual = hoy.getMonth();
 
-	let cargando       = $state(true);
-	let errorMsg       = $state('');
-	let sinArchivo     = $state(false);
-	let datosActual    = $state<EstadisticasResult | null>(null);
+	let cargando          = $state(true);
+	let errorMsg          = $state('');
+	let sinArchivo        = $state(false);
+	let datosActual       = $state<EstadisticasResult | null>(null);
 	let datosAnioAnterior = $state<EstadisticasResult | null>(null);
+	let datosInventario   = $state<InventarioAnioResult | null>(null);
+	let datosCxc          = $state<CxcMensualAnioResult | null>(null);
 	let canvasMes      = $state<HTMLCanvasElement | null>(null);
 	let canvasAnual    = $state<HTMLCanvasElement | null>(null);
 	let chartMes: Chart | null = null;
@@ -62,16 +64,27 @@
 		sinArchivo = false;
 		datosActual = null;
 		datosAnioAnterior = null;
+		datosInventario = null;
+		datosCxc = null;
 
-		try {
-			const resultado = await getEstadisticasDosAnios(anioActual, appConfig.numalm || undefined);
-			datosActual = resultado.actual;
-			datosAnioAnterior = resultado.anterior;
-		} catch (e) {
-			const msg = e instanceof Error ? e.message : String(e);
+		const numalm = appConfig.numalm || undefined;
+		const [resBase, resInv, resCxc] = await Promise.allSettled([
+			getEstadisticasDosAnios(anioActual, numalm),
+			getEstadisticasInventarioDetalle(numalm),
+			getEstadisticasCxcMensual(numalm),
+		]);
+
+		if (resBase.status === 'fulfilled') {
+			datosActual = resBase.value.actual;
+			datosAnioAnterior = resBase.value.anterior;
+		} else {
+			const msg = resBase.reason instanceof Error ? resBase.reason.message : String(resBase.reason);
 			if (msg.includes('no configurado')) sinArchivo = true;
 			else errorMsg = msg;
 		}
+		if (resInv.status === 'fulfilled') datosInventario = resInv.value;
+		if (resCxc.status === 'fulfilled') datosCxc = resCxc.value;
+
 		cargando = false;
 	}
 
@@ -80,9 +93,6 @@
 	// Derived para tab Detalles (reactive a mesSeleccionado)
 	const mesData     = $derived(getPeriodo(datosActual,       anioActual,     mesSeleccionado));
 	const mesPrevData = $derived(getPeriodo(datosAnioAnterior, anioActual - 1, mesSeleccionado));
-	const deltaVentas  = $derived(deltaPct(mesData.ventas_importe,  mesPrevData.ventas_importe));
-	const deltaCompras = $derived(deltaPct(mesData.compras_importe, mesPrevData.compras_importe));
-	const deltaAbonos  = $derived(deltaPct(mesData.abonos_importe,  mesPrevData.abonos_importe));
 	const balanceActual = $derived(mesData.ventas_importe + mesData.abonos_importe - mesData.compras_importe);
 	const balancePrevio = $derived(mesPrevData.ventas_importe + mesPrevData.abonos_importe - mesPrevData.compras_importe);
 	const deltaBalance  = $derived(deltaPct(balanceActual, balancePrevio));
@@ -111,6 +121,20 @@
 	const deltaComprasAnual = $derived(deltaPct(datosActual?.total_compras ?? 0, datosAnioAnterior?.total_compras ?? 0));
 	const deltaAbonosAnual  = $derived(deltaPct(datosActual?.total_abonos ?? 0, datosAnioAnterior?.total_abonos ?? 0));
 
+	const INV_EMPTY: InventarioMesStat = { mes: '', saldo_inicial: 0, entradas: 0, salidas: 0, saldo_final: 0 };
+	const CXC_EMPTY: CxcMensualMesStat = { mes: '', saldo_inicial: 0, cargos: 0, abonos: 0, saldo_final: 0 };
+
+	const invMesData = $derived(
+		datosInventario?.meses.find(m => m.mes === `${anioActual}-${String(mesSeleccionado + 1).padStart(2, '0')}`)
+		?? INV_EMPTY
+	);
+	const cxcMesData = $derived(
+		datosCxc?.meses.find(m => m.mes === `${anioActual}-${String(mesSeleccionado + 1).padStart(2, '0')}`)
+		?? CXC_EMPTY
+	);
+	const difInv = $derived(invMesData.entradas - invMesData.salidas);
+	const difCxc = $derived(cxcMesData.cargos - cxcMesData.abonos);
+
 	// Chart mensual: redibujar al cambiar mesSeleccionado
 	$effect(() => {
 		if (!datosActual || !canvasMes) return;
@@ -118,7 +142,7 @@
 			const c = new Chart(canvasMes, {
 				type: 'bar',
 				data: {
-					labels: ['Contado', 'Compras', 'Abonos'],
+					labels: ['Ventas', 'Compras', 'Abonos CXC'],
 					datasets: [
 						{
 							label: String(anioActual),
@@ -418,7 +442,7 @@
 						</div>
 					</div>
 
-					<!-- Gráfico barras mensual -->
+					<!-- Gráficos mensuales -->
 					<p class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-slate-400 animate-fadeSlide" style="animation-delay: 80ms">Gráfica</p>
 					<div class="bg-surface rounded p-4 border border-slate-200 animate-fadeSlide" style="animation-delay: 100ms">
 						<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400 mb-3">
@@ -429,84 +453,134 @@
 						</div>
 					</div>
 
-					<!-- Tabla desglose 3 columnas -->
+					<!-- Tabla desglose: 4 columnas unificadas -->
 					<p class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-slate-400 animate-fadeSlide" style="animation-delay: 120ms">Desglose</p>
 					<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide" style="animation-delay: 140ms">
 
-						<div class="grid grid-cols-3 bg-bg border-b border-slate-100">
-							<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2 border-r border-slate-100">
-								<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-green pr-3">Ventas</p>
+						<!-- Header 5 columnas -->
+						<div class="grid grid-cols-5 bg-bg border-b border-slate-100">
+							<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2 border-r border-slate-100">
+								<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-green pr-2">Ventas</p>
 								<p class="text-right text-[9px] font-mono text-slate-400">{anioActual}</p>
 								<p class="text-right text-[9px] font-mono text-slate-400">{anioActual - 1}</p>
 							</div>
-							<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2 border-r border-slate-100">
-								<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-amber pr-3">Compras</p>
+							<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2 border-r border-slate-100">
+								<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-amber pr-2">Compras</p>
 								<p class="text-right text-[9px] font-mono text-slate-400">{anioActual}</p>
 								<p class="text-right text-[9px] font-mono text-slate-400">{anioActual - 1}</p>
 							</div>
-							<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2">
-								<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-blue-600 pr-3">Cobranza</p>
+							<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2 border-r border-slate-100">
+								<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-violet-600 pr-2">Abonos</p>
 								<p class="text-right text-[9px] font-mono text-slate-400">{anioActual}</p>
 								<p class="text-right text-[9px] font-mono text-slate-400">{anioActual - 1}</p>
+							</div>
+							<div class="flex items-center justify-between px-3 py-2 border-r border-slate-100">
+								<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-teal-600">Inventario</p>
+								<p class="text-[9px] font-mono text-slate-400">Importe</p>
+							</div>
+							<div class="flex items-center justify-between px-3 py-2">
+								<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-violet-600">CXC</p>
+								<p class="text-[9px] font-mono text-slate-400">Importe</p>
 							</div>
 						</div>
 
-						<div class="grid grid-cols-3 divide-x divide-slate-100">
+						<!-- Body 5 columnas -->
+						<div class="grid grid-cols-5 divide-x divide-slate-100">
 							<!-- Col 1: Ventas -->
 							<div class="flex flex-col">
-								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2.5 border-b border-slate-50 items-center">
-									<span class="text-[12px] text-slate-600 pr-3">Facturas</span>
-									<span class="font-mono text-[12px] text-green text-right">{formatMXN(mesData.facturas_importe)}</span>
-									<span class="font-mono text-[12px] text-slate-400 text-right">{formatMXN(mesPrevData.facturas_importe)}</span>
+								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2.5 border-b border-slate-50 items-center">
+									<span class="text-[11px] text-slate-600 pr-2">Facturas</span>
+									<span class="font-mono text-[11px] text-green text-right">{formatMXN(mesData.facturas_importe)}</span>
+									<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(mesPrevData.facturas_importe)}</span>
 								</div>
-								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2.5 border-b border-slate-50 items-center">
-									<span class="text-[12px] text-slate-600 pr-3">Remisiones</span>
-									<span class="font-mono text-[12px] text-green text-right">{formatMXN(mesData.remisiones_importe)}</span>
-									<span class="font-mono text-[12px] text-slate-400 text-right">{formatMXN(mesPrevData.remisiones_importe)}</span>
+								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2.5 border-b border-slate-50 items-center">
+									<span class="text-[11px] text-slate-600 pr-2">Remisiones</span>
+									<span class="font-mono text-[11px] text-green text-right">{formatMXN(mesData.remisiones_importe)}</span>
+									<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(mesPrevData.remisiones_importe)}</span>
 								</div>
-								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2.5 border-b border-slate-50 items-center">
-									<span class="text-[12px] text-slate-600 pr-3">Notas</span>
-									<span class="font-mono text-[12px] text-green text-right">{formatMXN(mesData.notas_importe)}</span>
-									<span class="font-mono text-[12px] text-slate-400 text-right">{formatMXN(mesPrevData.notas_importe)}</span>
+								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2.5 border-b border-slate-50 items-center">
+									<span class="text-[11px] text-slate-600 pr-2">Notas</span>
+									<span class="font-mono text-[11px] text-green text-right">{formatMXN(mesData.notas_importe)}</span>
+									<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(mesPrevData.notas_importe)}</span>
 								</div>
-								<div class="mt-auto grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2.5 border-t border-slate-200 bg-green/[0.04] items-center">
-									<span class="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider pr-3">Total</span>
-									<span class="font-mono text-[13px] font-bold text-green text-right">{formatMXN(mesData.ventas_importe)}</span>
-									<span class="font-mono text-[12px] text-slate-400 text-right">{formatMXN(mesPrevData.ventas_importe)}</span>
+								<div class="mt-auto grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2.5 border-t border-slate-200 bg-green/[0.04] items-center">
+									<span class="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider pr-2">Total</span>
+									<span class="font-mono text-[12px] font-bold text-green text-right">{formatMXN(mesData.ventas_importe)}</span>
+									<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(mesPrevData.ventas_importe)}</span>
 								</div>
 							</div>
 							<!-- Col 2: Compras -->
 							<div class="flex flex-col">
-								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2.5 border-b border-slate-50 items-center">
-									<span class="text-[12px] text-slate-600 pr-3">Compras</span>
-									<span class="font-mono text-[12px] text-amber text-right">{formatMXN(mesData.compras_importe)}</span>
-									<span class="font-mono text-[12px] text-slate-400 text-right">{formatMXN(mesPrevData.compras_importe)}</span>
+								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2.5 border-b border-slate-50 items-center">
+									<span class="text-[11px] text-slate-600 pr-2">Compras</span>
+									<span class="font-mono text-[11px] text-amber text-right">{formatMXN(mesData.compras_importe)}</span>
+									<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(mesPrevData.compras_importe)}</span>
 								</div>
-								<div class="mt-auto grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2.5 border-t border-slate-200 bg-amber/[0.04] items-center">
-									<span class="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider pr-3">Total</span>
-									<span class="font-mono text-[13px] font-bold text-amber text-right">{formatMXN(mesData.compras_importe)}</span>
-									<span class="font-mono text-[12px] text-slate-400 text-right">{formatMXN(mesPrevData.compras_importe)}</span>
+								<div class="mt-auto grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2.5 border-t border-slate-200 bg-amber/[0.04] items-center">
+									<span class="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider pr-2">Total</span>
+									<span class="font-mono text-[12px] font-bold text-amber text-right">{formatMXN(mesData.compras_importe)}</span>
+									<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(mesPrevData.compras_importe)}</span>
 								</div>
 							</div>
-							<!-- Col 3: Cobranza -->
+							<!-- Col 3: Abonos CXC -->
 							<div class="flex flex-col">
-								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2.5 border-b border-slate-50 items-center">
-									<span class="text-[12px] text-slate-600 pr-3">Abonos CXC</span>
-									<span class="font-mono text-[12px] text-violet-600 text-right">{formatMXN(mesData.abonos_importe)}</span>
-									<span class="font-mono text-[12px] text-slate-400 text-right">{formatMXN(mesPrevData.abonos_importe)}</span>
+								<div class="grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2.5 border-b border-slate-50 items-center">
+									<span class="text-[11px] text-slate-600 pr-2">Abonos CXC</span>
+									<span class="font-mono text-[11px] text-violet-600 text-right">{formatMXN(mesData.abonos_importe)}</span>
+									<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(mesPrevData.abonos_importe)}</span>
 								</div>
-								<div class="mt-auto grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 sm:px-4 py-2.5 border-t border-slate-200 bg-violet-500/[0.04] items-center">
-									<span class="text-[11px] font-mono font-bold text-slate-500 uppercase tracking-wider pr-3">Total</span>
-									<span class="font-mono text-[13px] font-bold text-violet-600 text-right">{formatMXN(mesData.abonos_importe)}</span>
-									<span class="font-mono text-[12px] text-slate-400 text-right">{formatMXN(mesPrevData.abonos_importe)}</span>
+								<div class="mt-auto grid grid-cols-[minmax(0,auto)_1fr_1fr] px-3 py-2.5 border-t border-slate-200 bg-violet-500/[0.04] items-center">
+									<span class="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider pr-2">Total</span>
+									<span class="font-mono text-[12px] font-bold text-violet-600 text-right">{formatMXN(mesData.abonos_importe)}</span>
+									<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(mesPrevData.abonos_importe)}</span>
+								</div>
+							</div>
+							<!-- Col 4: Inventario -->
+							<div class="flex flex-col">
+								<div class="flex justify-between items-center px-3 py-2.5 border-b border-slate-50">
+									<span class="text-[11px] text-slate-500">Saldo ini.</span>
+									<span class="font-mono text-[11px] text-slate-600">{datosInventario ? formatMXN(invMesData.saldo_inicial) : '—'}</span>
+								</div>
+								<div class="flex justify-between items-center px-3 py-2.5 border-b border-slate-50">
+									<span class="text-[11px] text-slate-500">+ Entradas</span>
+									<span class="font-mono text-[11px] text-green">{datosInventario ? '+' + formatMXN(invMesData.entradas) : '—'}</span>
+								</div>
+								<div class="flex justify-between items-center px-3 py-2.5 border-b border-slate-50">
+									<span class="text-[11px] text-slate-500">− Salidas</span>
+									<span class="font-mono text-[11px] text-red-500">{datosInventario ? '−' + formatMXN(invMesData.salidas) : '—'}</span>
+								</div>
+								<div class="mt-auto flex justify-between items-center px-3 py-2.5 border-t border-slate-200 bg-teal-50/50">
+									<span class="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">Saldo final</span>
+									<span class="font-mono text-[12px] font-bold text-teal-600">{datosInventario ? formatMXN(invMesData.saldo_final) : '—'}</span>
+								</div>
+							</div>
+							<!-- Col 4: CXC -->
+							<div class="flex flex-col">
+								<div class="flex justify-between items-center px-3 py-2.5 border-b border-slate-50">
+									<span class="text-[11px] text-slate-500">Saldo ini.</span>
+									<span class="font-mono text-[11px] text-slate-600">{datosCxc ? formatMXN(cxcMesData.saldo_inicial) : '—'}</span>
+								</div>
+								<div class="flex justify-between items-center px-3 py-2.5 border-b border-slate-50">
+									<span class="text-[11px] text-slate-500">+ Cargos</span>
+									<span class="font-mono text-[11px] text-green">{datosCxc ? '+' + formatMXN(cxcMesData.cargos) : '—'}</span>
+								</div>
+								<div class="flex justify-between items-center px-3 py-2.5 border-b border-slate-50">
+									<span class="text-[11px] text-slate-500">− Abonos</span>
+									<span class="font-mono text-[11px] text-red-500">{datosCxc ? '−' + formatMXN(cxcMesData.abonos) : '—'}</span>
+								</div>
+								<div class="mt-auto flex justify-between items-center px-3 py-2.5 border-t border-slate-200 bg-violet-50/50">
+									<span class="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">Saldo final</span>
+									<span class="font-mono text-[12px] font-bold text-violet-600">{datosCxc ? formatMXN(cxcMesData.saldo_final) : '—'}</span>
 								</div>
 							</div>
 						</div>
 
 					</div>
 
-					<!-- Balance card ancho completo -->
+					<!-- Resumen: 3 cards -->
 					<p class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-slate-400 animate-fadeSlide">Resumen</p>
+
+					<!-- Balance Ventas vs Compras -->
 					<div class="bg-surface rounded border border-slate-200 border-l-[3px] px-4 py-3 flex items-center justify-between animate-fadeSlide overflow-hidden"
 						style="border-left-color: {balanceActual >= 0 ? '#1f9254' : '#ef4444'}">
 						<div>
@@ -523,6 +597,39 @@
 								</p>
 							{/if}
 						</div>
+					</div>
+
+					<!-- Diferencias Inventario y CXC -->
+					<div class="grid grid-cols-2 gap-3 animate-fadeSlide">
+
+						<!-- Diferencia Inventario -->
+						<div class="bg-surface rounded border border-slate-200 border-l-[3px] px-4 py-3 flex items-center justify-between overflow-hidden"
+							style="border-left-color: {!datosInventario ? '#94a3b8' : difInv >= 0 ? '#14b8a6' : '#ef4444'}">
+							<div>
+								<p class="text-[8px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400 mb-0.5">Inventario</p>
+								<p class="text-[9px] font-mono text-slate-400">Entradas − Salidas</p>
+							</div>
+							<div class="text-right">
+								<span class="font-barlow-condensed text-[28px] font-bold leading-none {!datosInventario ? 'text-slate-300' : difInv >= 0 ? 'text-teal-600' : 'text-red-500'}">
+									{datosInventario ? formatMXN(difInv) : '—'}
+								</span>
+							</div>
+						</div>
+
+						<!-- Diferencia CXC -->
+						<div class="bg-surface rounded border border-slate-200 border-l-[3px] px-4 py-3 flex items-center justify-between overflow-hidden"
+							style="border-left-color: {!datosCxc ? '#94a3b8' : difCxc >= 0 ? '#7c3aed' : '#ef4444'}">
+							<div>
+								<p class="text-[8px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400 mb-0.5">CXC</p>
+								<p class="text-[9px] font-mono text-slate-400">Cargos − Abonos</p>
+							</div>
+							<div class="text-right">
+								<span class="font-barlow-condensed text-[28px] font-bold leading-none {!datosCxc ? 'text-slate-300' : difCxc >= 0 ? 'text-violet-600' : 'text-red-500'}">
+									{datosCxc ? formatMXN(difCxc) : '—'}
+								</span>
+							</div>
+						</div>
+
 					</div>
 
 				{:else}

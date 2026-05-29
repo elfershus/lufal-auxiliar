@@ -759,6 +759,34 @@ fn import_seguimientos(rows: Vec<SeguimientoFraccionRow>, mode: String) -> Resul
     db::import_seguimientos(&rows, &mode).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn get_estadisticas_inventario_detalle(
+    grpc: State<'_, GrpcState>,
+    numalm: Option<String>,
+) -> Result<InventarioAnioResult, String> {
+    grpc.lock()
+        .await
+        .as_mut()
+        .ok_or_else(|| "Sin configuración".to_string())?
+        .get_estadisticas_inventario_detalle(numalm)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_estadisticas_cxc_mensual(
+    grpc: State<'_, GrpcState>,
+    numalm: Option<String>,
+) -> Result<CxcMensualAnioResult, String> {
+    grpc.lock()
+        .await
+        .as_mut()
+        .ok_or_else(|| "Sin configuración".to_string())?
+        .get_estadisticas_cxc_mensual(numalm)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 // ── Entry point ────────────────────────────────────────────────
 
 #[tauri::command]
@@ -833,6 +861,8 @@ pub fn run() {
             save_dbf_cxc,
             get_estadisticas_docum,
             get_estadisticas_dos_anios,
+            get_estadisticas_inventario_detalle,
+            get_estadisticas_cxc_mensual,
             save_sucursales_map,
         ])
         .run(tauri::generate_context!())

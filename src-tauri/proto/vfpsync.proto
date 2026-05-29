@@ -46,13 +46,17 @@ service VfpSyncService {
   rpc GetClienteEstadisticas(GetClienteEstadisticasRequest) returns (GetClienteEstadisticasResponse);
   rpc GetTopArticulosPorCliente(GetTopArticulosPorClienteRequest) returns (GetTopArticulosPorClienteResponse);
   rpc GetEstadisticasGenerales(GetEstadisticasGeneralesRequest) returns (GetEstadisticasGeneralesResponse);
-  rpc GetEstadisticasCompras(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasComprasResponse);
-  rpc GetEstadisticasVentasContado(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasVentasContadoResponse);
-  rpc GetEstadisticasVentasCredito(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasVentasCreditoResponse);
-  rpc GetEstadisticasPagosCredito(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasPagosCreditoResponse);
-  rpc GetEstadisticasInventario(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasInventarioResponse);
-  rpc GetEstadisticasVentasContadoPorTipo(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasVentasContadoPorTipoResponse);
-  rpc GetEstadisticasVentasCreditoPorTipo(GetEstadisticasTrimestralesRequest) returns (GetEstadisticasVentasCreditoPorTipoResponse);
+  rpc GetEstadisticasCompras(GetEstadisticasMensualesRequest) returns (GetEstadisticasComprasResponse);
+  rpc GetEstadisticasVentasContado(GetEstadisticasMensualesRequest) returns (GetEstadisticasVentasContadoResponse);
+  rpc GetEstadisticasVentasCredito(GetEstadisticasMensualesRequest) returns (GetEstadisticasVentasCreditoResponse);
+  rpc GetEstadisticasPagosCredito(GetEstadisticasMensualesRequest) returns (GetEstadisticasPagosCreditoResponse);
+  rpc GetEstadisticasInventario(GetEstadisticasMensualesRequest) returns (GetEstadisticasInventarioResponse);
+  rpc GetEstadisticasInventarioDetalle(GetEstadisticasMensualesRequest) returns (GetEstadisticasInventarioDetalleResponse);
+  rpc GetEstadisticasCxcMensual(GetEstadisticasMensualesRequest) returns (GetEstadisticasCxcMensualResponse);
+  rpc GetEstadisticasVentasContadoPorTipo(GetEstadisticasMensualesRequest) returns (GetEstadisticasVentasContadoPorTipoResponse);
+  rpc GetEstadisticasVentasCreditoPorTipo(GetEstadisticasMensualesRequest) returns (GetEstadisticasVentasCreditoPorTipoResponse);
+  rpc GetArticuloByBarcode(GetArticuloByBarcodeRequest) returns (GetArticuloByBarcodeResponse);
+  rpc ListCodigosEmpaque(ListCodigosEmpaqueRequest) returns (ListCodigosEmpaqueResponse);
 }
 
 // ── Sync requests ──────────────────────────────────────────────
@@ -728,6 +732,7 @@ message TopArticuloClienteItem {
   string desc = 2;
   double total_cant = 3;
   int32 num_documentos = 4;
+  string unidad = 5;
 }
 
 message GetTopArticulosPorClienteResponse {
@@ -819,14 +824,14 @@ message GetCorteResponse {
 }
 
 message ListCortesRequest {
-  optional string numalm = 1; // filtro por almacén exacto
+  optional string numalm    = 1; // filtro por almacén exacto
   optional string fecha_from = 2; // ISO 8601 YYYY-MM-DD, inclusivo
-  optional string fecha_to = 3; // ISO 8601 YYYY-MM-DD, inclusivo
-  optional string corte = 4; // folio exacto (C:7)
-  optional string estado = 5; // "abierto" (sin fechafin) | "cerrado" (con fechafin)
-  int32 page_size = 6; // default 50
+  optional string fecha_to   = 3; // ISO 8601 YYYY-MM-DD, inclusivo
+  optional string corte      = 4; // folio exacto (C:7)
+  optional string estado     = 5; // "abierto" (sin fechafin) | "cerrado" (con fechafin)
+  int32  page_size  = 6; // default 50
   string page_token = 7; // cursor: último corte visto
-  optional string sort_dir = 8; // "desc" = más recientes primero (default) | "asc"
+  optional string sort_dir  = 8; // "desc" = más recientes primero (default) | "asc"
   bool complete_days = 9; // Si true, extiende la página para no partir un día entre páginas
 }
 
@@ -921,81 +926,154 @@ message CajaRecord {
   bool deleted_in_dbf = 20;
 }
 
-// ── Estadísticas trimestrales ─────────────────────────────────────────────────
+// ── Estadísticas mensuales ────────────────────────────────────────────────────
 
-message GetEstadisticasTrimestralesRequest {
+message GetEstadisticasMensualesRequest {
   optional string numalm = 1; // vacío = todos los almacenes
 }
 
 message EstadisticaAlmacenItem {
-  string numalm = 1;
-  string nomalm = 2;
+  string numalm  = 1;
+  string nomalm  = 2;
   double importe = 3;
 }
 
-message EstadisticasTrimestreItem {
-  string trimestre = 1; // "YYYY-QN" ej: "2025-Q4"
+message EstadisticasMesItem {
+  string mes          = 1; // "YYYY-MM" ej: "2025-05"
   string fecha_inicio = 2; // ISO 8601 YYYY-MM-DD
-  string fecha_fin = 3; // ISO 8601 YYYY-MM-DD
-  bool es_actual = 4; // true si es el trimestre en curso
+  string fecha_fin    = 3; // ISO 8601 YYYY-MM-DD
+  bool   es_actual    = 4; // true si es el mes en curso
   repeated EstadisticaAlmacenItem almacenes = 5;
 }
 
 message GetEstadisticasComprasResponse {
-  repeated EstadisticasTrimestreItem trimestres = 1;
+  repeated EstadisticasMesItem meses = 1;
 }
 
 message GetEstadisticasVentasContadoResponse {
-  repeated EstadisticasTrimestreItem trimestres = 1;
+  repeated EstadisticasMesItem meses = 1;
 }
 
 message GetEstadisticasVentasCreditoResponse {
-  repeated EstadisticasTrimestreItem trimestres = 1;
+  repeated EstadisticasMesItem meses = 1;
 }
 
 message GetEstadisticasPagosCreditoResponse {
-  repeated EstadisticasTrimestreItem trimestres = 1;
+  repeated EstadisticasMesItem meses = 1;
 }
 
 message EstadisticaInventarioAlmacenItem {
-  string numalm = 1;
-  string nomalm = 2;
-  double saldo_inicial = 3; // SUM(cant*costo) acumulado antes del trimestre
-  double movimiento = 4; // SUM(cant*costo) dentro del trimestre
-  double saldo_final = 5; // saldo_inicial + movimiento
+  string numalm        = 1;
+  string nomalm        = 2;
+  double saldo_inicial = 3; // SUM(cant*costo) acumulado antes del mes
+  double movimiento    = 4; // SUM(cant*costo) dentro del mes
+  double saldo_final   = 5; // saldo_inicial + movimiento
 }
 
-message EstadisticasInventarioTrimestreItem {
-  string trimestre = 1; // "YYYY-QN"
+message EstadisticasInventarioMesItem {
+  string mes          = 1; // "YYYY-MM"
   string fecha_inicio = 2; // ISO 8601 YYYY-MM-DD
-  string fecha_fin = 3; // ISO 8601 YYYY-MM-DD
-  bool es_actual = 4;
+  string fecha_fin    = 3; // ISO 8601 YYYY-MM-DD
+  bool   es_actual    = 4;
   repeated EstadisticaInventarioAlmacenItem almacenes = 5;
 }
 
 message GetEstadisticasInventarioResponse {
-  repeated EstadisticasInventarioTrimestreItem trimestres = 1;
+  repeated EstadisticasInventarioMesItem meses = 1;
+}
+
+message EstadisticaInventarioDetalleAlmacenItem {
+  string numalm        = 1;
+  string nomalm        = 2;
+  double saldo_inicial = 3; // SUM(cant*costo) acumulado neto antes del mes
+  double entradas      = 4; // SUM(cant*costo) donde cant > 0
+  double salidas       = 5; // SUM(ABS(cant*costo)) donde cant < 0
+  double saldo_final   = 6; // saldo_inicial + entradas - salidas
+}
+
+message EstadisticasInventarioDetalleMesItem {
+  string mes          = 1;
+  string fecha_inicio = 2;
+  string fecha_fin    = 3;
+  bool   es_actual    = 4;
+  repeated EstadisticaInventarioDetalleAlmacenItem almacenes = 5;
+}
+
+message GetEstadisticasInventarioDetalleResponse {
+  repeated EstadisticasInventarioDetalleMesItem meses = 1;
+}
+
+// ── GetEstadisticasCxcMensual ─────────────────────────────────────────────────
+
+message EstadisticasCxcAlmacenItem {
+  string numalm        = 1;
+  string nomalm        = 2;
+  double saldo_inicial = 3; // cargos - abonos acumulados antes del mes
+  double cargos        = 4; // ca='0' dentro del mes
+  double abonos        = 5; // ca='1' dentro del mes
+  double saldo_final   = 6; // saldo_inicial + cargos - abonos
+}
+
+message EstadisticasCxcMesItem {
+  string mes          = 1;
+  string fecha_inicio = 2;
+  string fecha_fin    = 3;
+  bool   es_actual    = 4;
+  repeated EstadisticasCxcAlmacenItem almacenes = 5;
+}
+
+message GetEstadisticasCxcMensualResponse {
+  repeated EstadisticasCxcMesItem meses = 1;
 }
 
 // ── Ventas por tipo de documento ──────────────────────────────────────────────
 
 message EstadisticaVentasTipoDocItem {
-  string tipodoc = 1; // "R", "N" o "F"
+  string tipodoc                       = 1; // "R", "N" o "F"
   repeated EstadisticaAlmacenItem almacenes = 2;
 }
 
-message EstadisticasVentasPorTipoTrimestreItem {
-  string trimestre = 1; // "YYYY-QN"
+message EstadisticasVentasPorTipoMesItem {
+  string mes          = 1; // "YYYY-MM"
   string fecha_inicio = 2;
-  string fecha_fin = 3;
-  bool es_actual = 4;
+  string fecha_fin    = 3;
+  bool   es_actual    = 4;
   repeated EstadisticaVentasTipoDocItem tipos = 5;
 }
 
 message GetEstadisticasVentasContadoPorTipoResponse {
-  repeated EstadisticasVentasPorTipoTrimestreItem trimestres = 1;
+  repeated EstadisticasVentasPorTipoMesItem meses = 1;
 }
 
 message GetEstadisticasVentasCreditoPorTipoResponse {
-  repeated EstadisticasVentasPorTipoTrimestreItem trimestres = 1;
+  repeated EstadisticasVentasPorTipoMesItem meses = 1;
+}
+
+// ── Códigos de empaque ────────────────────────────────────────────────────────
+
+message CodigoEmpaqueRecord {
+  int64  id                   = 1;
+  string numart               = 2;
+  string tipo_empaque         = 3;
+  int32  unidades_por_empaque = 4;
+  string codigo_barras        = 5;
+  string denominacion_empaque = 6;
+}
+
+message GetArticuloByBarcodeRequest {
+  string barcode = 1;
+}
+
+message GetArticuloByBarcodeResponse {
+  ArticuloRecord      articulo             = 1;
+  int32               unidades_por_empaque = 2;
+  CodigoEmpaqueRecord empaque              = 3;
+}
+
+message ListCodigosEmpaqueRequest {
+  string numart = 1;
+}
+
+message ListCodigosEmpaqueResponse {
+  repeated CodigoEmpaqueRecord empaques = 1;
 }

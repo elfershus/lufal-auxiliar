@@ -257,3 +257,27 @@ export interface EstadisticasDosAniosResult {
 	actual: EstadisticasResult;
 	anterior: EstadisticasResult;
 }
+
+export interface InventarioMesStat {
+	mes: string;
+	saldo_inicial: number;
+	entradas: number;
+	salidas: number;
+	saldo_final: number;
+}
+
+export interface InventarioAnioResult {
+	meses: InventarioMesStat[];
+}
+
+export interface CxcMensualMesStat {
+	mes: string;
+	saldo_inicial: number;
+	cargos: number;
+	abonos: number;
+	saldo_final: number;
+}
+
+export interface CxcMensualAnioResult {
+	meses: CxcMensualMesStat[];
+}
