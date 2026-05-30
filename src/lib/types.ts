@@ -173,6 +173,8 @@ export interface PeriodoStat {
 	credito_count: number;
 	abonos_importe: number;
 	abonos_count: number;
+	devoluciones_importe: number;
+	devoluciones_count: number;
 }
 
 export interface EstadisticasResult {
@@ -185,6 +187,8 @@ export interface EstadisticasResult {
 	total_credito_count: number;
 	total_abonos: number;
 	total_abonos_count: number;
+	total_devoluciones: number;
+	total_devoluciones_count: number;
 }
 
 export interface PairingRow {

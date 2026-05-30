@@ -714,6 +714,8 @@ message ClienteMesStats {
   double abonos_cxc = 7; // SUM(importe) WHERE ca='1'
   double saldo_inicio = 8;
   double saldo_fin = 9;
+  int32 devoluciones_count = 10; // documentos DN/DR status=0
+  double devoluciones_total = 11; // SUM(importe) de esos documentos
 }
 
 message GetClienteEstadisticasResponse {
@@ -824,14 +826,14 @@ message GetCorteResponse {
 }
 
 message ListCortesRequest {
-  optional string numalm    = 1; // filtro por almacén exacto
+  optional string numalm = 1; // filtro por almacén exacto
   optional string fecha_from = 2; // ISO 8601 YYYY-MM-DD, inclusivo
-  optional string fecha_to   = 3; // ISO 8601 YYYY-MM-DD, inclusivo
-  optional string corte      = 4; // folio exacto (C:7)
-  optional string estado     = 5; // "abierto" (sin fechafin) | "cerrado" (con fechafin)
-  int32  page_size  = 6; // default 50
+  optional string fecha_to = 3; // ISO 8601 YYYY-MM-DD, inclusivo
+  optional string corte = 4; // folio exacto (C:7)
+  optional string estado = 5; // "abierto" (sin fechafin) | "cerrado" (con fechafin)
+  int32 page_size = 6; // default 50
   string page_token = 7; // cursor: último corte visto
-  optional string sort_dir  = 8; // "desc" = más recientes primero (default) | "asc"
+  optional string sort_dir = 8; // "desc" = más recientes primero (default) | "asc"
   bool complete_days = 9; // Si true, extiende la página para no partir un día entre páginas
 }
 
@@ -933,16 +935,16 @@ message GetEstadisticasMensualesRequest {
 }
 
 message EstadisticaAlmacenItem {
-  string numalm  = 1;
-  string nomalm  = 2;
+  string numalm = 1;
+  string nomalm = 2;
   double importe = 3;
 }
 
 message EstadisticasMesItem {
-  string mes          = 1; // "YYYY-MM" ej: "2025-05"
+  string mes = 1; // "YYYY-MM" ej: "2025-05"
   string fecha_inicio = 2; // ISO 8601 YYYY-MM-DD
-  string fecha_fin    = 3; // ISO 8601 YYYY-MM-DD
-  bool   es_actual    = 4; // true si es el mes en curso
+  string fecha_fin = 3; // ISO 8601 YYYY-MM-DD
+  bool es_actual = 4; // true si es el mes en curso
   repeated EstadisticaAlmacenItem almacenes = 5;
 }
 
@@ -963,18 +965,18 @@ message GetEstadisticasPagosCreditoResponse {
 }
 
 message EstadisticaInventarioAlmacenItem {
-  string numalm        = 1;
-  string nomalm        = 2;
+  string numalm = 1;
+  string nomalm = 2;
   double saldo_inicial = 3; // SUM(cant*costo) acumulado antes del mes
-  double movimiento    = 4; // SUM(cant*costo) dentro del mes
-  double saldo_final   = 5; // saldo_inicial + movimiento
+  double movimiento = 4; // SUM(cant*costo) dentro del mes
+  double saldo_final = 5; // saldo_inicial + movimiento
 }
 
 message EstadisticasInventarioMesItem {
-  string mes          = 1; // "YYYY-MM"
+  string mes = 1; // "YYYY-MM"
   string fecha_inicio = 2; // ISO 8601 YYYY-MM-DD
-  string fecha_fin    = 3; // ISO 8601 YYYY-MM-DD
-  bool   es_actual    = 4;
+  string fecha_fin = 3; // ISO 8601 YYYY-MM-DD
+  bool es_actual = 4;
   repeated EstadisticaInventarioAlmacenItem almacenes = 5;
 }
 
@@ -983,19 +985,19 @@ message GetEstadisticasInventarioResponse {
 }
 
 message EstadisticaInventarioDetalleAlmacenItem {
-  string numalm        = 1;
-  string nomalm        = 2;
+  string numalm = 1;
+  string nomalm = 2;
   double saldo_inicial = 3; // SUM(cant*costo) acumulado neto antes del mes
-  double entradas      = 4; // SUM(cant*costo) donde cant > 0
-  double salidas       = 5; // SUM(ABS(cant*costo)) donde cant < 0
-  double saldo_final   = 6; // saldo_inicial + entradas - salidas
+  double entradas = 4; // SUM(cant*costo) donde cant > 0
+  double salidas = 5; // SUM(ABS(cant*costo)) donde cant < 0
+  double saldo_final = 6; // saldo_inicial + entradas - salidas
 }
 
 message EstadisticasInventarioDetalleMesItem {
-  string mes          = 1;
+  string mes = 1;
   string fecha_inicio = 2;
-  string fecha_fin    = 3;
-  bool   es_actual    = 4;
+  string fecha_fin = 3;
+  bool es_actual = 4;
   repeated EstadisticaInventarioDetalleAlmacenItem almacenes = 5;
 }
 
@@ -1006,19 +1008,19 @@ message GetEstadisticasInventarioDetalleResponse {
 // ── GetEstadisticasCxcMensual ─────────────────────────────────────────────────
 
 message EstadisticasCxcAlmacenItem {
-  string numalm        = 1;
-  string nomalm        = 2;
+  string numalm = 1;
+  string nomalm = 2;
   double saldo_inicial = 3; // cargos - abonos acumulados antes del mes
-  double cargos        = 4; // ca='0' dentro del mes
-  double abonos        = 5; // ca='1' dentro del mes
-  double saldo_final   = 6; // saldo_inicial + cargos - abonos
+  double cargos = 4; // ca='0' dentro del mes
+  double abonos = 5; // ca='1' dentro del mes
+  double saldo_final = 6; // saldo_inicial + cargos - abonos
 }
 
 message EstadisticasCxcMesItem {
-  string mes          = 1;
+  string mes = 1;
   string fecha_inicio = 2;
-  string fecha_fin    = 3;
-  bool   es_actual    = 4;
+  string fecha_fin = 3;
+  bool es_actual = 4;
   repeated EstadisticasCxcAlmacenItem almacenes = 5;
 }
 
@@ -1029,15 +1031,15 @@ message GetEstadisticasCxcMensualResponse {
 // ── Ventas por tipo de documento ──────────────────────────────────────────────
 
 message EstadisticaVentasTipoDocItem {
-  string tipodoc                       = 1; // "R", "N" o "F"
+  string tipodoc = 1; // "R", "N" o "F"
   repeated EstadisticaAlmacenItem almacenes = 2;
 }
 
 message EstadisticasVentasPorTipoMesItem {
-  string mes          = 1; // "YYYY-MM"
+  string mes = 1; // "YYYY-MM"
   string fecha_inicio = 2;
-  string fecha_fin    = 3;
-  bool   es_actual    = 4;
+  string fecha_fin = 3;
+  bool es_actual = 4;
   repeated EstadisticaVentasTipoDocItem tipos = 5;
 }
 
@@ -1052,11 +1054,11 @@ message GetEstadisticasVentasCreditoPorTipoResponse {
 // ── Códigos de empaque ────────────────────────────────────────────────────────
 
 message CodigoEmpaqueRecord {
-  int64  id                   = 1;
-  string numart               = 2;
-  string tipo_empaque         = 3;
-  int32  unidades_por_empaque = 4;
-  string codigo_barras        = 5;
+  int64 id = 1;
+  string numart = 2;
+  string tipo_empaque = 3;
+  int32 unidades_por_empaque = 4;
+  string codigo_barras = 5;
   string denominacion_empaque = 6;
 }
 
@@ -1065,9 +1067,9 @@ message GetArticuloByBarcodeRequest {
 }
 
 message GetArticuloByBarcodeResponse {
-  ArticuloRecord      articulo             = 1;
-  int32               unidades_por_empaque = 2;
-  CodigoEmpaqueRecord empaque              = 3;
+  ArticuloRecord articulo = 1;
+  int32 unidades_por_empaque = 2;
+  CodigoEmpaqueRecord empaque = 3;
 }
 
 message ListCodigosEmpaqueRequest {

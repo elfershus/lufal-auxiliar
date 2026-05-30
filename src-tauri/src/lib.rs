@@ -237,6 +237,8 @@ struct PeriodoStat {
     credito_count: u32,
     abonos_importe: f64,
     abonos_count: u32,
+    devoluciones_importe: f64,
+    devoluciones_count: u32,
 }
 
 #[derive(serde::Serialize)]
@@ -250,6 +252,8 @@ struct EstadisticasResult {
     total_credito_count: u32,
     total_abonos: f64,
     total_abonos_count: u32,
+    total_devoluciones: f64,
+    total_devoluciones_count: u32,
 }
 
 #[derive(serde::Serialize)]
@@ -279,7 +283,8 @@ fn compute_estadisticas(
         let es_venta =
             (matches!(tipodoc, "R" | "F") && doc.formapago.trim() == "1") || es_nota_venta;
         let es_compra = tipodoc == "C";
-        if !es_venta && !es_compra {
+        let es_devolucion = matches!(tipodoc, "DN" | "DR");
+        if !es_venta && !es_compra && !es_devolucion {
             continue;
         }
 
@@ -325,6 +330,8 @@ fn compute_estadisticas(
                 credito_count: 0,
                 abonos_importe: 0.0,
                 abonos_count: 0,
+                devoluciones_importe: 0.0,
+                devoluciones_count: 0,
             });
 
         let total_doc = doc.importe - doc.descuento + doc.impuesto1 + doc.impuesto2;
@@ -346,9 +353,12 @@ fn compute_estadisticas(
                 }
                 _ => {}
             }
-        } else {
+        } else if es_compra {
             entry.compras_importe += total_doc;
             entry.compras_count += 1;
+        } else if es_devolucion {
+            entry.devoluciones_importe += total_doc;
+            entry.devoluciones_count += 1;
         }
     }
 
@@ -395,6 +405,8 @@ fn compute_estadisticas(
                 credito_count: 0,
                 abonos_importe: 0.0,
                 abonos_count: 0,
+                devoluciones_importe: 0.0,
+                devoluciones_count: 0,
             });
         entry.abonos_importe += cxc.importe;
         entry.abonos_count += 1;
@@ -412,6 +424,8 @@ fn compute_estadisticas(
         total_credito_count: periodos.iter().map(|p| p.credito_count).sum(),
         total_abonos: periodos.iter().map(|p| p.abonos_importe).sum(),
         total_abonos_count: periodos.iter().map(|p| p.abonos_count).sum(),
+        total_devoluciones: periodos.iter().map(|p| p.devoluciones_importe).sum(),
+        total_devoluciones_count: periodos.iter().map(|p| p.devoluciones_count).sum(),
         periodos,
     }
 }
