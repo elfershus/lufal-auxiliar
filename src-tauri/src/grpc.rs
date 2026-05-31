@@ -73,6 +73,7 @@ impl GrpcClient {
             .map(|a| AlmacenRecord {
                 numalm: a.numalm.trim().to_string(),
                 nomalm: a.nomalm.trim().to_string(),
+                letra: a.letra.trim().to_string(),
             })
             .collect())
     }

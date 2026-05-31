@@ -1,6 +1,7 @@
 export interface AlmacenRecord {
 	numalm: string;
 	nomalm: string;
+	letra: string;
 }
 
 export interface DocumentoRecord {
@@ -147,14 +148,12 @@ export interface ArticuloFracciones {
 export interface SucursalEntry {
 	numalm: string;
 	letra: string;
+	dbf_path: string | null;
 }
 
-export interface DbfPaths {
-	dbf_arts: string | null;
-	dbf_unidades: string | null;
-	dbf_docum: string | null;
-	dbf_cxc: string | null;
+export interface SucursalesConfig {
 	sucursales: SucursalEntry[];
+	default_numalm: string | null;
 }
 
 export interface PeriodoStat {

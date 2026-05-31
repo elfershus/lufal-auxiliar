@@ -7,7 +7,8 @@
 	import FraccionesView from './views/FraccionesView.svelte';
 	import EstadisticasView from './views/EstadisticasView.svelte';
 	import EtiquetasView from './views/EtiquetasView.svelte';
-	import { initClient } from './lib/grpc.js';
+	import { initClient, listAlmacenes } from './lib/grpc.js';
+	import { initNumalm } from './lib/config.svelte.js';
 	import { check } from '@tauri-apps/plugin-updater';
 
 	type View = 'ordenes' | 'detalle' | 'config' | 'fracciones' | 'estadisticas' | 'etiquetas';
@@ -36,6 +37,14 @@
 
 			const configured = await initClient();
 			needsSetup = !configured;
+			if (configured) {
+				try {
+					const almacenes = await listAlmacenes();
+					await initNumalm(almacenes);
+				} catch {
+					// Sin red o config incompleta: continuar sin inicializar almacén
+				}
+			}
 			activeView = 'estadisticas';
 		})();
 	});

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct AlmacenRecord {
     pub numalm: String,
     pub nomalm: String,
+    pub letra: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

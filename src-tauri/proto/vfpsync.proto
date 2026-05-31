@@ -55,6 +55,7 @@ service VfpSyncService {
   rpc GetEstadisticasCxcMensual(GetEstadisticasMensualesRequest) returns (GetEstadisticasCxcMensualResponse);
   rpc GetEstadisticasVentasContadoPorTipo(GetEstadisticasMensualesRequest) returns (GetEstadisticasVentasContadoPorTipoResponse);
   rpc GetEstadisticasVentasCreditoPorTipo(GetEstadisticasMensualesRequest) returns (GetEstadisticasVentasCreditoPorTipoResponse);
+  rpc GetEstadisticasDevoluciones(GetEstadisticasMensualesRequest) returns (GetEstadisticasDevolucionesResponse);
   rpc GetArticuloByBarcode(GetArticuloByBarcodeRequest) returns (GetArticuloByBarcodeResponse);
   rpc ListCodigosEmpaque(ListCodigosEmpaqueRequest) returns (ListCodigosEmpaqueResponse);
 }
@@ -760,6 +761,8 @@ message AlmacenRecord {
   // Campos de sincronización
   string sync_hash = 16;
   bool deleted_in_dbf = 17;
+  // Campo derivado (no viene del DBF)
+  string letra = 18;
 }
 
 // UnidadRecord: unidades alternativas de venta por artículo (Unidades.DBF)
@@ -1049,6 +1052,10 @@ message GetEstadisticasVentasContadoPorTipoResponse {
 
 message GetEstadisticasVentasCreditoPorTipoResponse {
   repeated EstadisticasVentasPorTipoMesItem meses = 1;
+}
+
+message GetEstadisticasDevolucionesResponse {
+  repeated EstadisticasMesItem meses = 1;
 }
 
 // ── Códigos de empaque ────────────────────────────────────────────────────────

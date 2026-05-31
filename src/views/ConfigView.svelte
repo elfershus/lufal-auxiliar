@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { listAlmacenes } from '../lib/grpc.js';
-	import { getDbfPaths, saveDbfArts, saveDbfUnidades, saveDbfDocum, saveDbfCxc, saveSucursalesMap } from '../lib/dbf.js';
+	import { getSucursalesConfig, saveSucursalDbfPath, saveDefaultNumalm, saveSucursalesMap } from '../lib/dbf.js';
 	import { appConfig } from '../lib/config.svelte.js';
-	import type { AlmacenRecord, SucursalEntry } from '../lib/types.js';
+	import type { AlmacenRecord, SucursalEntry, SucursalesConfig } from '../lib/types.js';
 
 	const PASSWORD = 'wombocombo69';
 
@@ -30,61 +30,37 @@
 		}
 	}
 
-	// ── Almacén config
+	// ── Almacenes y sucursales
 	let almacenes = $state<AlmacenRecord[]>([]);
-	let selectedNumalm = $state(appConfig.numalm);
+	let sucursalesConfig = $state<SucursalesConfig>({ sucursales: [], default_numalm: null });
 	let cargando = $state(false);
 	let errorMsg = $state('');
-	let saved = $state(false);
-
-	// ── DBF paths config
-	let artsPath = $state('');
-	let unidadesPath = $state('');
-	let documPath = $state('');
-	let savingArts = $state(false);
-	let savingUnidades = $state(false);
-	let savingDocum = $state(false);
-	let savedArts = $state(false);
-	let savedUnidades = $state(false);
-	let savedDocum = $state(false);
-	let cxcPath = $state('');
-	let savingCxc = $state(false);
-	let savedCxc = $state(false);
+	let savingDbfFor = $state<string | null>(null);
 	let dbfError = $state('');
-
-	// ── Sucursales mapping
-	let sucursalesMap = $state<SucursalEntry[]>([]);
-	let savingSucursales = $state(false);
-	let savedSucursales = $state(false);
-	let sucursalesError = $state('');
 
 	$effect(() => {
 		if (unlocked) {
-			cargarAlmacenes();
-			getDbfPaths().then((p) => {
-				artsPath = p.dbf_arts ?? '';
-				unidadesPath = p.dbf_unidades ?? '';
-				documPath = p.dbf_docum ?? '';
-				cxcPath = p.dbf_cxc ?? '';
-				sucursalesMap = p.sucursales ?? [];
-			});
+			cargar();
 		}
 	});
 
-	async function cargarAlmacenes() {
+	async function cargar() {
 		cargando = true;
 		errorMsg = '';
 		try {
-			almacenes = await listAlmacenes();
-			if (!selectedNumalm && almacenes.length > 0) {
-				selectedNumalm = almacenes[0].numalm;
-			}
-			// Asegurar que haya una entrada por cada almacén
-			for (const alm of almacenes) {
-				if (!sucursalesMap.find((s) => s.numalm === alm.numalm)) {
-					sucursalesMap = [...sucursalesMap, { numalm: alm.numalm, letra: '' }];
-				}
-			}
+			const [alms, cfg] = await Promise.all([listAlmacenes(), getSucursalesConfig()]);
+			almacenes = alms;
+			sucursalesConfig = cfg;
+
+			// Auto-sincronizar letras desde la API
+			const entries: SucursalEntry[] = alms.map((alm) => {
+				const existing = cfg.sucursales.find((s) => s.numalm === alm.numalm);
+				return { numalm: alm.numalm, letra: alm.letra, dbf_path: existing?.dbf_path ?? null };
+			});
+			const validas = entries.filter((s) => s.letra.trim().length > 0);
+			if (validas.length > 0) await saveSucursalesMap(validas);
+			// Reflejar dbf_paths actualizados en el estado local
+			sucursalesConfig = { ...sucursalesConfig, sucursales: entries };
 		} catch (e) {
 			errorMsg = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -92,114 +68,35 @@
 		}
 	}
 
-	async function guardarSucursales() {
-		sucursalesError = '';
-		savingSucursales = true;
-		try {
-			const validas = sucursalesMap.filter((s) => s.letra.trim().length > 0);
-			await saveSucursalesMap(validas);
-			savedSucursales = true;
-			setTimeout(() => (savedSucursales = false), 2000);
-		} catch (e) {
-			sucursalesError = e instanceof Error ? e.message : String(e);
-		} finally {
-			savingSucursales = false;
-		}
-	}
-
-	function guardar() {
-		appConfig.numalm = selectedNumalm;
-		const alm = almacenes.find((a) => a.numalm === selectedNumalm);
-		appConfig.nomalm = alm?.nomalm ?? '';
-		saved = true;
-		setTimeout(() => onBack(), 800);
-	}
-
-	async function seleccionarArts() {
+	async function asignarCarpeta(numalm: string) {
 		dbfError = '';
-		const selected = await open({
-			directory: false,
-			multiple: false,
-			title: 'Seleccionar archivo de artículos (.DBF)',
-			filters: [{ name: 'dBASE', extensions: ['dbf', 'DBF'] }]
-		});
+		const selected = await open({ directory: true, multiple: false, title: 'Seleccionar carpeta de archivos DBF' });
 		if (!selected || typeof selected !== 'string') return;
-		savingArts = true;
+		savingDbfFor = numalm;
 		try {
-			await saveDbfArts(selected);
-			artsPath = selected;
-			savedArts = true;
-			setTimeout(() => (savedArts = false), 2000);
+			await saveSucursalDbfPath(numalm, selected);
+			sucursalesConfig = {
+				...sucursalesConfig,
+				sucursales: sucursalesConfig.sucursales.map((s) =>
+					s.numalm === numalm ? { ...s, dbf_path: selected } : s
+				)
+			};
 		} catch (e) {
 			dbfError = e instanceof Error ? e.message : String(e);
 		} finally {
-			savingArts = false;
+			savingDbfFor = null;
 		}
 	}
 
-	async function seleccionarUnidades() {
-		dbfError = '';
-		const selected = await open({
-			directory: false,
-			multiple: false,
-			title: 'Seleccionar archivo de fracciones (.DBF)',
-			filters: [{ name: 'dBASE', extensions: ['dbf', 'DBF'] }]
-		});
-		if (!selected || typeof selected !== 'string') return;
-		savingUnidades = true;
+	async function setDefault(numalm: string) {
 		try {
-			await saveDbfUnidades(selected);
-			unidadesPath = selected;
-			savedUnidades = true;
-			setTimeout(() => (savedUnidades = false), 2000);
+			await saveDefaultNumalm(numalm);
+			sucursalesConfig = { ...sucursalesConfig, default_numalm: numalm };
+			appConfig.numalm = numalm;
+			const alm = almacenes.find((a) => a.numalm === numalm);
+			if (alm) appConfig.nomalm = alm.nomalm;
 		} catch (e) {
 			dbfError = e instanceof Error ? e.message : String(e);
-		} finally {
-			savingUnidades = false;
-		}
-	}
-
-	async function seleccionarDocum() {
-		dbfError = '';
-		const selected = await open({
-			directory: false,
-			multiple: false,
-			title: 'Seleccionar archivo de documentos (Docum.DBF)',
-			filters: [{ name: 'dBASE', extensions: ['dbf', 'DBF'] }]
-		});
-		if (!selected || typeof selected !== 'string') return;
-		savingDocum = true;
-		try {
-			await saveDbfDocum(selected);
-			documPath = selected;
-			savedDocum = true;
-			setTimeout(() => (savedDocum = false), 2000);
-		} catch (e) {
-			dbfError = e instanceof Error ? e.message : String(e);
-		} finally {
-			savingDocum = false;
-		}
-	}
-
-	async function seleccionarCxc() {
-		dbfError = '';
-		const selected = await open({
-			directory: false,
-			multiple: false,
-			title: 'Seleccionar archivo de cuentas por cobrar (Cxc.DBF)',
-			filters: [{ name: 'dBASE', extensions: ['dbf', 'DBF'] }]
-		});
-		if (!selected || typeof selected !== 'string') return;
-		savingCxc = true;
-		try {
-			await saveDbfCxc(selected);
-			cxcPath = selected;
-			savedCxc = true;
-			setTimeout(() => (savedCxc = false), 2000);
-		} catch (e) {
-			dbfError = e instanceof Error ? e.message : String(e);
-		} finally {
-			savingCxc = false;
 		}
 	}
 </script>
@@ -262,274 +159,108 @@
 			</div>
 
 		{:else}
-			<!-- Almacén config -->
+			<!-- Sucursales -->
 			<div class="bg-surface rounded-card p-5 shadow-card animate-fadeSlide">
-				<h2 class="text-[11px] font-semibold tracking-[0.1em] uppercase text-slate-400 mb-4">
-					Almacén activo
-				</h2>
-
-				{#if cargando}
-					<div class="h-10 rounded-lg animate-shimmer mb-4"
-						style="background: linear-gradient(90deg, #e2e8f0 25%, #f0f4f8 50%, #e2e8f0 75%); background-size: 400% 100%">
-					</div>
-				{:else if errorMsg}
-					<p class="text-[13px] text-red-500 mb-4">{errorMsg}</p>
-				{:else}
-					<select
-						bind:value={selectedNumalm}
-						class="w-full h-10 rounded-lg px-3 text-[14px] font-barlow font-medium mb-4
-							bg-bg text-slate-700 border border-slate-200
-							focus:outline-none focus:ring-2 focus:ring-amber/60"
-					>
-						{#each almacenes as alm (alm.numalm)}
-							<option value={alm.numalm}>
-								{alm.numalm} — {alm.nomalm}
-							</option>
-						{/each}
-					</select>
-				{/if}
-
-				<button
-					onclick={guardar}
-					disabled={!selectedNumalm || cargando || saved}
-					class="w-full h-10 rounded-lg text-[14px] font-medium font-barlow transition-colors
-						{saved
-							? 'bg-green-500 text-white cursor-default'
-							: 'bg-amber text-white hover:opacity-90 active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed'}"
-				>
-					{saved ? '✓ Guardado' : 'Guardar'}
-				</button>
-			</div>
-
-			<!-- DBF files -->
-			<div class="bg-surface rounded-card p-5 shadow-card mt-4 animate-fadeSlide" style="animation-delay: 60ms">
 				<h2 class="text-[11px] font-semibold tracking-[0.1em] uppercase text-slate-400 mb-1">
-					Archivos DBF
+					Sucursales
 				</h2>
 				<p class="text-[11px] text-slate-400 mb-4">
-					Selecciona cada archivo individualmente. Pueden tener cualquier nombre.
+					Asigna la carpeta DBF de cada sucursal y marca cuál abre al iniciar la app.
 				</p>
 
 				{#if dbfError}
 					<p class="text-[12px] text-red-500 mb-3">{dbfError}</p>
 				{/if}
 
-				<!-- Artículos -->
-				<div class="mb-3">
-					<p class="text-[11px] font-semibold text-slate-500 mb-1.5">Archivo de artículos</p>
-					{#if artsPath}
-						<div class="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-bg border border-slate-200">
-							<svg class="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
-							</svg>
-							<span class="font-mono text-[11px] text-slate-600 truncate flex-1" title={artsPath}>
-								{artsPath.split(/[\\/]/).pop()}
-							</span>
-							{#if savedArts}
-								<svg class="w-3 h-3 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-									<polyline points="20 6 9 17 4 12" />
-								</svg>
-							{/if}
-						</div>
-					{/if}
-					<button
-						onclick={seleccionarArts}
-						disabled={savingArts}
-						class="w-full h-9 rounded-lg text-[13px] font-medium font-barlow transition-colors flex items-center justify-center gap-2
-							{artsPath
-								? 'bg-bg border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100'
-								: 'bg-navy text-white hover:opacity-90 active:opacity-80'}
-							disabled:opacity-40 disabled:cursor-not-allowed"
-					>
-						{#if savingArts}
-							<svg class="w-3.5 h-3.5 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-								<path d="M21 12a9 9 0 11-6.219-8.56" />
-							</svg>
-							Guardando…
-						{:else}
-							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
-							</svg>
-							{artsPath ? 'Cambiar archivo de artículos' : 'Seleccionar archivo de artículos'}
-						{/if}
-					</button>
-				</div>
-
-				<div class="border-t border-slate-100 my-3"></div>
-
-				<!-- Fracciones -->
-				<div class="mb-3">
-					<p class="text-[11px] font-semibold text-slate-500 mb-1.5">Archivo de fracciones</p>
-					{#if unidadesPath}
-						<div class="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-bg border border-slate-200">
-							<svg class="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
-							</svg>
-							<span class="font-mono text-[11px] text-slate-600 truncate flex-1" title={unidadesPath}>
-								{unidadesPath.split(/[\\/]/).pop()}
-							</span>
-							{#if savedUnidades}
-								<svg class="w-3 h-3 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-									<polyline points="20 6 9 17 4 12" />
-								</svg>
-							{/if}
-						</div>
-					{/if}
-					<button
-						onclick={seleccionarUnidades}
-						disabled={savingUnidades}
-						class="w-full h-9 rounded-lg text-[13px] font-medium font-barlow transition-colors flex items-center justify-center gap-2
-							{unidadesPath
-								? 'bg-bg border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100'
-								: 'bg-navy text-white hover:opacity-90 active:opacity-80'}
-							disabled:opacity-40 disabled:cursor-not-allowed"
-					>
-						{#if savingUnidades}
-							<svg class="w-3.5 h-3.5 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-								<path d="M21 12a9 9 0 11-6.219-8.56" />
-							</svg>
-							Guardando…
-						{:else}
-							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-								<line x1="19" y1="5" x2="5" y2="19" /><circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" />
-							</svg>
-							{unidadesPath ? 'Cambiar archivo de fracciones' : 'Seleccionar archivo de fracciones'}
-						{/if}
-					</button>
-				</div>
-
-				<div class="border-t border-slate-100 my-3"></div>
-
-				<!-- Documentos -->
-				<div>
-					<p class="text-[11px] font-semibold text-slate-500 mb-1.5">Archivo de documentos (Docum.DBF)</p>
-					{#if documPath}
-						<div class="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-bg border border-slate-200">
-							<svg class="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
-							</svg>
-							<span class="font-mono text-[11px] text-slate-600 truncate flex-1" title={documPath}>
-								{documPath.split(/[\\/]/).pop()}
-							</span>
-							{#if savedDocum}
-								<svg class="w-3 h-3 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-									<polyline points="20 6 9 17 4 12" />
-								</svg>
-							{/if}
-						</div>
-					{/if}
-					<button
-						onclick={seleccionarDocum}
-						disabled={savingDocum}
-						class="w-full h-9 rounded-lg text-[13px] font-medium font-barlow transition-colors flex items-center justify-center gap-2
-							{documPath
-								? 'bg-bg border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100'
-								: 'bg-navy text-white hover:opacity-90 active:opacity-80'}
-							disabled:opacity-40 disabled:cursor-not-allowed"
-					>
-						{#if savingDocum}
-							<svg class="w-3.5 h-3.5 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-								<path d="M21 12a9 9 0 11-6.219-8.56" />
-							</svg>
-							Guardando…
-						{:else}
-							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-								<line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
-							</svg>
-							{documPath ? 'Cambiar archivo de documentos' : 'Seleccionar archivo de documentos'}
-						{/if}
-					</button>
-				</div>
-
-				<div class="border-t border-slate-100 my-3"></div>
-
-				<!-- CXC -->
-				<div>
-					<p class="text-[11px] font-semibold text-slate-500 mb-1.5">Archivo de cuentas por cobrar (Cxc.DBF)</p>
-					{#if cxcPath}
-						<div class="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg bg-bg border border-slate-200">
-							<svg class="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
-							</svg>
-							<span class="font-mono text-[11px] text-slate-600 truncate flex-1" title={cxcPath}>
-								{cxcPath.split(/[\\/]/).pop()}
-							</span>
-							{#if savedCxc}
-								<svg class="w-3 h-3 text-green-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-									<polyline points="20 6 9 17 4 12" />
-								</svg>
-							{/if}
-						</div>
-					{/if}
-					<button
-						onclick={seleccionarCxc}
-						disabled={savingCxc}
-						class="w-full h-9 rounded-lg text-[13px] font-medium font-barlow transition-colors flex items-center justify-center gap-2
-							{cxcPath
-								? 'bg-bg border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100'
-								: 'bg-navy text-white hover:opacity-90 active:opacity-80'}
-							disabled:opacity-40 disabled:cursor-not-allowed"
-					>
-						{#if savingCxc}
-							<svg class="w-3.5 h-3.5 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-								<path d="M21 12a9 9 0 11-6.219-8.56" />
-							</svg>
-							Guardando…
-						{:else}
-							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-								<circle cx="12" cy="12" r="10" /><path d="M16 8h-6a2 2 0 000 4h4a2 2 0 010 4H8" /><line x1="12" y1="6" x2="12" y2="8" /><line x1="12" y1="16" x2="12" y2="18" />
-							</svg>
-							{cxcPath ? 'Cambiar archivo de CXC' : 'Seleccionar archivo de CXC'}
-						{/if}
-					</button>
-				</div>
-			</div>
-			<!-- Sucursales -->
-			<div class="bg-surface rounded-card p-5 shadow-card mt-4 animate-fadeSlide" style="animation-delay: 120ms">
-				<h2 class="text-[11px] font-semibold tracking-[0.1em] uppercase text-slate-400 mb-1">
-					Letras de sucursales
-				</h2>
-				<p class="text-[11px] text-slate-400 mb-4">
-					Asigna la letra que identifica cada sucursal en el campo KEYDOCUM de CXC.DBF.
-				</p>
-
-				{#if sucursalesError}
-					<p class="text-[12px] text-red-500 mb-3">{sucursalesError}</p>
-				{/if}
-
-				{#if sucursalesMap.length === 0}
-					<p class="text-[12px] text-slate-400 mb-4 italic">Cargando almacenes…</p>
-				{:else}
-					<div class="border border-slate-200 rounded-lg overflow-hidden mb-3">
-						<div class="grid grid-cols-[3rem_1fr_4rem] bg-bg border-b border-slate-200 px-3 py-1.5">
-							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">Núm.</span>
-							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">Nombre</span>
-							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider text-center">Letra</span>
-						</div>
-						{#each sucursalesMap as entry, i (entry.numalm)}
-							{@const alm = almacenes.find((a) => a.numalm === entry.numalm)}
-							<div class="grid grid-cols-[3rem_1fr_4rem] px-3 py-1.5 items-center {i > 0 ? 'border-t border-slate-100' : ''}">
-								<span class="font-mono text-[12px] text-slate-500">{entry.numalm}</span>
-								<span class="text-[12px] text-slate-600 truncate pr-2">{alm?.nomalm ?? ''}</span>
-								<input
-									type="text"
-									maxlength="1"
-									bind:value={entry.letra}
-									placeholder="—"
-									class="w-9 h-7 mx-auto text-center font-mono text-[14px] font-bold uppercase rounded border border-slate-200 bg-bg text-navy focus:outline-none focus:ring-2 focus:ring-amber/60 block"
-								/>
+				{#if cargando}
+					<div class="space-y-2">
+						{#each [1, 2] as _}
+							<div class="h-14 rounded-lg animate-shimmer"
+								style="background: linear-gradient(90deg, #e2e8f0 25%, #f0f4f8 50%, #e2e8f0 75%); background-size: 400% 100%">
 							</div>
 						{/each}
 					</div>
-				{/if}
+				{:else if errorMsg}
+					<p class="text-[13px] text-red-500">{errorMsg}</p>
+				{:else}
+					<div class="border border-slate-200 rounded-lg overflow-hidden">
+						<!-- Encabezado -->
+						<div class="grid grid-cols-[3.5rem_1fr_auto_auto] bg-bg border-b border-slate-200 px-3 py-1.5 gap-2">
+							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">Núm.</span>
+							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider">Nombre / Carpeta DBF</span>
+							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider text-center w-16">Carpeta</span>
+							<span class="text-[10px] font-mono font-semibold text-slate-400 uppercase tracking-wider text-center w-10">Default</span>
+						</div>
 
-				<button
-					onclick={guardarSucursales}
-					disabled={savingSucursales || sucursalesMap.length === 0}
-					class="w-full h-10 rounded-lg text-[14px] font-medium font-barlow transition-colors {savedSucursales ? 'bg-green-500 text-white cursor-default' : 'bg-navy text-white hover:opacity-90 active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed'}"
-				>
-					{savedSucursales ? '✓ Guardado' : savingSucursales ? 'Guardando…' : 'Guardar letras'}
-				</button>
+						{#each almacenes as alm, i (alm.numalm)}
+							{@const entry = sucursalesConfig.sucursales.find((s) => s.numalm === alm.numalm)}
+							{@const isDefault = sucursalesConfig.default_numalm === alm.numalm}
+							{@const isSaving = savingDbfFor === alm.numalm}
+							<div class="grid grid-cols-[3.5rem_1fr_auto_auto] px-3 py-2 items-center gap-2 {i > 0 ? 'border-t border-slate-100' : ''}">
+								<!-- Núm -->
+								<span class="font-mono text-[12px] text-slate-500">{alm.numalm}</span>
+
+								<!-- Nombre + carpeta -->
+								<div class="min-w-0">
+									<p class="text-[12px] text-slate-700 font-medium truncate">{alm.nomalm}</p>
+									{#if entry?.dbf_path}
+										<p class="font-mono text-[10px] text-slate-400 truncate" title={entry.dbf_path}>
+											{entry.dbf_path}
+										</p>
+									{:else}
+										<p class="text-[10px] text-slate-300 italic">Sin carpeta asignada</p>
+									{/if}
+								</div>
+
+								<!-- Botón carpeta -->
+								<button
+									onclick={() => asignarCarpeta(alm.numalm)}
+									disabled={isSaving}
+									title={entry?.dbf_path ? 'Cambiar carpeta DBF' : 'Asignar carpeta DBF'}
+									class="w-16 h-7 rounded text-[11px] font-medium font-barlow transition-colors flex items-center justify-center gap-1
+										{entry?.dbf_path
+											? 'bg-bg border border-slate-200 text-slate-500 hover:bg-slate-50'
+											: 'bg-navy text-white hover:opacity-90'}
+										disabled:opacity-40"
+								>
+									{#if isSaving}
+										<svg class="w-3 h-3 animate-spin-fast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+											<path d="M21 12a9 9 0 11-6.219-8.56" />
+										</svg>
+									{:else}
+										<svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+										</svg>
+										{entry?.dbf_path ? 'Cambiar' : 'Asignar'}
+									{/if}
+								</button>
+
+								<!-- Radio predeterminado -->
+								<div class="flex justify-center w-10">
+									<button
+										onclick={() => setDefault(alm.numalm)}
+										title="Marcar como predeterminado"
+										class="w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors
+											{isDefault
+												? 'border-amber bg-amber'
+												: 'border-slate-300 bg-bg hover:border-amber/60'}"
+									>
+										{#if isDefault}
+											<div class="w-2 h-2 rounded-full bg-white"></div>
+										{/if}
+									</button>
+								</div>
+							</div>
+						{/each}
+					</div>
+
+					{#if sucursalesConfig.default_numalm}
+						<p class="text-[11px] text-slate-400 mt-2">
+							Predeterminado: <span class="font-mono font-semibold text-slate-600">{sucursalesConfig.default_numalm}</span>
+							— {almacenes.find((a) => a.numalm === sucursalesConfig.default_numalm)?.nomalm ?? ''}
+						</p>
+					{/if}
+				{/if}
 			</div>
 		{/if}
 	</div>

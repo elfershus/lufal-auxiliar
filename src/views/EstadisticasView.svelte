@@ -2,6 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import {
 		Chart, BarController, BarElement,
+		LineController, LineElement, PointElement, Filler,
 		CategoryScale, LinearScale, Tooltip, Legend
 	} from 'chart.js';
 	import { getEstadisticasDosAnios, getEstadisticasInventarioDetalle, getEstadisticasCxcMensual } from '../lib/dbf.js';
@@ -9,7 +10,7 @@
 	import { formatMXN } from '../lib/utils.js';
 	import type { EstadisticasResult, PeriodoStat, InventarioAnioResult, CxcMensualAnioResult, InventarioMesStat, CxcMensualMesStat } from '../lib/types.js';
 
-	Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+	Chart.register(BarController, BarElement, LineController, LineElement, PointElement, Filler, CategoryScale, LinearScale, Tooltip, Legend);
 
 	interface Props {
 		onGoConfig: () => void;
@@ -31,9 +32,23 @@
 	let datosInventario   = $state<InventarioAnioResult | null>(null);
 	let datosCxc          = $state<CxcMensualAnioResult | null>(null);
 	let canvasMes      = $state<HTMLCanvasElement | null>(null);
-	let canvasAnual    = $state<HTMLCanvasElement | null>(null);
 	let chartMes: Chart | null = null;
-	let chartAnual: Chart | null = null;
+
+	// Visión General — 4 gráficas de línea
+	let canvasVentasContado = $state<HTMLCanvasElement | null>(null);
+	let canvasGastos        = $state<HTMLCanvasElement | null>(null);
+	let canvasAbonos        = $state<HTMLCanvasElement | null>(null);
+	let chartVentasContado: Chart | null = null;
+	let chartGastos:        Chart | null = null;
+	let chartAbonos:        Chart | null = null;
+
+	// Columna derecha — 3 gráficas
+	let canvasBalance    = $state<HTMLCanvasElement | null>(null);
+	let canvasInventario = $state<HTMLCanvasElement | null>(null);
+	let canvasCxc        = $state<HTMLCanvasElement | null>(null);
+	let chartBalance:    Chart | null = null;
+	let chartInventario: Chart | null = null;
+	let chartCxc:        Chart | null = null;
 
 	// Tab y navegación de mes
 	let tabActiva       = $state<'detalles' | 'vision'>('detalles');
@@ -129,8 +144,33 @@
 	const deltaVentasAnual = $derived(deltaPct(datosActual?.total_ventas ?? 0, datosAnioAnterior?.total_ventas ?? 0));
 	const deltaComprasAnual = $derived(deltaPct(datosActual?.total_compras ?? 0, datosAnioAnterior?.total_compras ?? 0));
 	const deltaAbonosAnual  = $derived(deltaPct(datosActual?.total_abonos ?? 0, datosAnioAnterior?.total_abonos ?? 0));
-	const totalInvAnual = $derived(datosInventario?.meses.reduce((s, m) => s + m.entradas - m.salidas, 0) ?? null);
-	const totalCxcAnual = $derived(datosCxc?.meses.reduce((s, m) => s + m.cargos - m.abonos, 0) ?? null);
+	const saldoFinalInv = $derived((() => {
+		const key = `${anioActual}-${String(mesActual + 1).padStart(2, '0')}`;
+		return datosInventario?.meses.find(m => m.mes === key)?.saldo_final ?? null;
+	})());
+	const saldoFinalCxc = $derived((() => {
+		const key = `${anioActual}-${String(mesActual + 1).padStart(2, '0')}`;
+		return datosCxc?.meses.find(m => m.mes === key)?.saldo_final ?? null;
+	})());
+
+	// Valores del mes actual para headers de tarjetas de gráfica
+	const mesActualVentasContado = $derived(getPeriodo(datosActual, anioActual, mesActual).ventas_importe);
+	const mesActualGastos        = $derived(getPeriodo(datosActual, anioActual, mesActual).compras_importe);
+	const mesActualAbonos        = $derived(getPeriodo(datosActual, anioActual, mesActual).abonos_importe);
+
+	// Headers columna derecha
+	const mesActualBalance = $derived((() => {
+		const p = getPeriodo(datosActual, anioActual, mesActual);
+		return p.ventas_importe + p.abonos_importe - p.compras_importe - p.devoluciones_importe;
+	})());
+	const mesActualInv = $derived((() => {
+		const key = `${anioActual}-${String(mesActual + 1).padStart(2, '0')}`;
+		return datosInventario?.meses.find(m => m.mes === key)?.saldo_final ?? null;
+	})());
+	const mesActualCxc = $derived((() => {
+		const key = `${anioActual}-${String(mesActual + 1).padStart(2, '0')}`;
+		return datosCxc?.meses.find(m => m.mes === key)?.saldo_final ?? null;
+	})());
 
 	const INV_EMPTY: InventarioMesStat = { mes: '', saldo_inicial: 0, entradas: 0, salidas: 0, saldo_final: 0 };
 	const CXC_EMPTY: CxcMensualMesStat = { mes: '', saldo_inicial: 0, cargos: 0, abonos: 0, saldo_final: 0 };
@@ -217,110 +257,163 @@
 		return () => { c.destroy(); };
 	});
 
-	// Chart anual
-	$effect(() => {
-		if (!datosActual || !canvasAnual) return;
-			const ventasActual  = MESES_CORTOS.map((_, i) => getPeriodo(datosActual,       anioActual,     i).ventas_importe);
-			const comprasActual = MESES_CORTOS.map((_, i) => getPeriodo(datosActual,       anioActual,     i).compras_importe);
-			const abonosActual  = MESES_CORTOS.map((_, i) => getPeriodo(datosActual,       anioActual,     i).abonos_importe);
-			const ventasAnt     = MESES_CORTOS.map((_, i) => getPeriodo(datosAnioAnterior, anioActual - 1, i).ventas_importe);
-			const comprasAnt    = MESES_CORTOS.map((_, i) => getPeriodo(datosAnioAnterior, anioActual - 1, i).compras_importe);
-			const abonosAnt     = MESES_CORTOS.map((_, i) => getPeriodo(datosAnioAnterior, anioActual - 1, i).abonos_importe);
+	function makeLineConfig(
+		currentData: number[],
+		prevData: number[] | null,
+		borderColor: string,
+		fillColor: string,
+	): any {
+		const currentMasked = currentData.map((v, i) => (i <= mesActual ? v : null));
+		return {
+			type: 'line',
+			data: {
+				labels: MESES_CORTOS,
+				datasets: [
+					{
+						label: String(anioActual),
+						data: currentMasked,
+						borderColor, borderWidth: 2,
+						backgroundColor: fillColor,
+						fill: 'origin', tension: 0.35, spanGaps: false,
+						pointRadius: currentMasked.map((_, i) => (i === mesActual ? 4 : 0)),
+						pointHoverRadius: 5,
+						pointBackgroundColor: borderColor,
+					},
+					...(prevData !== null ? [{
+						label: String(anioActual - 1),
+						data: prevData,
+						borderColor: borderColor + '55',
+						borderWidth: 1.5, borderDash: [4, 4],
+						backgroundColor: 'transparent',
+						fill: false, tension: 0.35, spanGaps: true,
+						pointRadius: 0, pointHoverRadius: 4,
+					}] : []),
+				],
+			},
+			options: {
+				responsive: true, maintainAspectRatio: false, animation: false,
+				plugins: {
+					legend: { display: false },
+					tooltip: {
+						mode: 'index', intersect: false,
+						callbacks: { label(ctx: any) { return ` ${ctx.dataset.label}: ${formatMXN(ctx.parsed.y ?? 0)}`; } },
+					},
+				},
+				scales: {
+					x: { grid: { display: false }, ticks: { font: { family: 'JetBrains Mono, monospace', size: 9 }, color: '#94a3b8' } },
+					y: {
+						beginAtZero: false,
+						grid: { color: 'rgba(0,0,0,0.05)' },
+						border: { display: false },
+						ticks: {
+							font: { family: 'JetBrains Mono, monospace', size: 9 }, color: '#94a3b8', maxTicksLimit: 4,
+							callback(val: any) {
+								const n = Number(val);
+								if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+								if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`;
+								return `$${n}`;
+							},
+						},
+					},
+				},
+			},
+		};
+	}
 
-			const c = new Chart(canvasAnual, {
-				type: 'bar',
-				data: {
-					labels: MESES_CORTOS,
-					datasets: [
-						{
-							label: `Contado ${anioActual}`,
-							data: ventasActual,
-							backgroundColor: ventasActual.map((_, i) => i === mesActual ? 'rgba(31,146,84,0.85)' : 'rgba(31,146,84,0.22)'),
-							borderColor: ventasActual.map((_, i) => i === mesActual ? 'rgba(31,146,84,1)' : 'rgba(31,146,84,0.4)'),
-							borderWidth: 1, borderRadius: 2,
-						},
-						{
-							label: `Contado ${anioActual - 1}`,
-							data: ventasAnt,
-							backgroundColor: ventasAnt.map((_, i) => i === mesActual ? 'rgba(31,146,84,0.35)' : 'rgba(31,146,84,0.13)'),
-							borderColor: 'rgba(31,146,84,0.35)',
-							borderWidth: 1, borderRadius: 2,
-						},
-						{
-							label: `Compras ${anioActual}`,
-							data: comprasActual,
-							backgroundColor: comprasActual.map((_, i) => i === mesActual ? 'rgba(232,130,10,0.85)' : 'rgba(232,130,10,0.22)'),
-							borderColor: comprasActual.map((_, i) => i === mesActual ? 'rgba(232,130,10,1)' : 'rgba(232,130,10,0.4)'),
-							borderWidth: 1, borderRadius: 2,
-						},
-						{
-							label: `Compras ${anioActual - 1}`,
-							data: comprasAnt,
-							backgroundColor: comprasAnt.map((_, i) => i === mesActual ? 'rgba(232,130,10,0.35)' : 'rgba(232,130,10,0.13)'),
-							borderColor: 'rgba(232,130,10,0.35)',
-							borderWidth: 1, borderRadius: 2,
-						},
-						{
-							label: `Abonos ${anioActual}`,
-							data: abonosActual,
-							backgroundColor: abonosActual.map((_, i) => i === mesActual ? 'rgba(139,92,246,0.85)' : 'rgba(139,92,246,0.22)'),
-							borderColor: abonosActual.map((_, i) => i === mesActual ? 'rgba(139,92,246,1)' : 'rgba(139,92,246,0.4)'),
-							borderWidth: 1, borderRadius: 2,
-						},
-						{
-							label: `Abonos ${anioActual - 1}`,
-							data: abonosAnt,
-							backgroundColor: abonosAnt.map((_, i) => i === mesActual ? 'rgba(139,92,246,0.35)' : 'rgba(139,92,246,0.13)'),
-							borderColor: 'rgba(139,92,246,0.35)',
-							borderWidth: 1, borderRadius: 2,
-						},
-					],
-				},
-				options: {
-					responsive: true,
-					maintainAspectRatio: false,
-					plugins: {
-						legend: {
-							display: true, position: 'top', align: 'end',
-							labels: {
-								font: { family: 'Barlow, sans-serif', size: 10 },
-								color: '#94a3b8', boxWidth: 10, boxHeight: 10,
-								padding: 8, usePointStyle: true, pointStyle: 'rect',
-							},
-						},
-						tooltip: {
-							callbacks: {
-								label(ctx: any) { return ` ${ctx.dataset.label}: ${formatMXN(ctx.parsed.y ?? 0)}`; },
-							},
-						},
-					},
-					scales: {
-						x: {
-							grid: { display: false },
-							ticks: { font: { family: 'JetBrains Mono, monospace', size: 10 }, color: '#94a3b8' },
-						},
-						y: {
-							beginAtZero: true,
-							grid: { color: 'rgba(0,0,0,0.06)' },
-							ticks: {
-								font: { family: 'JetBrains Mono, monospace', size: 9 },
-								color: '#94a3b8',
-								callback(val: any) {
-									const n = Number(val);
-									if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-									if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}k`;
-									return `$${n}`;
-								},
-							},
-						},
-					},
-				},
-			} as any);
-		chartAnual = c;
+	$effect(() => {
+		if (!datosActual || !canvasVentasContado) return;
+		const c = new Chart(canvasVentasContado, makeLineConfig(
+			MESES_CORTOS.map((_, i) => getPeriodo(datosActual, anioActual, i).ventas_importe),
+			MESES_CORTOS.map((_, i) => getPeriodo(datosAnioAnterior, anioActual - 1, i).ventas_importe),
+			'#1f9254', 'rgba(31,146,84,0.10)',
+		) as any);
+		chartVentasContado = c;
 		return () => { c.destroy(); };
 	});
 
-	onDestroy(() => { chartMes?.destroy(); chartAnual?.destroy(); });
+	$effect(() => {
+		if (!datosActual || !canvasGastos) return;
+		const c = new Chart(canvasGastos, makeLineConfig(
+			MESES_CORTOS.map((_, i) => getPeriodo(datosActual, anioActual, i).compras_importe),
+			MESES_CORTOS.map((_, i) => getPeriodo(datosAnioAnterior, anioActual - 1, i).compras_importe),
+			'#e8820a', 'rgba(232,130,10,0.10)',
+		) as any);
+		chartGastos = c;
+		return () => { c.destroy(); };
+	});
+
+	$effect(() => {
+		if (!datosActual || !canvasAbonos) return;
+		const c = new Chart(canvasAbonos, makeLineConfig(
+			MESES_CORTOS.map((_, i) => getPeriodo(datosActual, anioActual, i).abonos_importe),
+			MESES_CORTOS.map((_, i) => getPeriodo(datosAnioAnterior, anioActual - 1, i).abonos_importe),
+			'#14b8a6', 'rgba(20,184,166,0.10)',
+		) as any);
+		chartAbonos = c;
+		return () => { c.destroy(); };
+	});
+
+	// Balance General mensual
+	$effect(() => {
+		if (!datosActual || !canvasBalance) return;
+		const current = MESES_CORTOS.map((_, i) => {
+			const p = getPeriodo(datosActual, anioActual, i);
+			return p.ventas_importe + p.abonos_importe - p.compras_importe - p.devoluciones_importe;
+		});
+		const prev = MESES_CORTOS.map((_, i) => {
+			const p = getPeriodo(datosAnioAnterior, anioActual - 1, i);
+			return p.ventas_importe + p.abonos_importe - p.compras_importe - p.devoluciones_importe;
+		});
+		const c = new Chart(canvasBalance, makeLineConfig(current, prev, '#334155', 'rgba(51,65,85,0.10)') as any);
+		chartBalance = c;
+		return () => { c.destroy(); };
+	});
+
+	// Inventario mensual
+	$effect(() => {
+		if (!canvasInventario) return;
+		const current = MESES_CORTOS.map((_, i) => {
+			const key = `${anioActual}-${String(i + 1).padStart(2, '0')}`;
+			const inv = datosInventario?.meses.find(m => m.mes === key);
+			return inv != null ? inv.saldo_final : 0;
+		});
+		const prev = MESES_CORTOS.map((_, i) => {
+			const key = `${anioActual - 1}-${String(i + 1).padStart(2, '0')}`;
+			const inv = datosInventario?.meses.find(m => m.mes === key);
+			return inv != null ? inv.saldo_final : 0;
+		});
+		const c = new Chart(canvasInventario, makeLineConfig(current, prev, '#14b8a6', 'rgba(20,184,166,0.10)') as any);
+		chartInventario = c;
+		return () => { c.destroy(); };
+	});
+
+	// CXC mensual
+	$effect(() => {
+		if (!canvasCxc) return;
+		const current = MESES_CORTOS.map((_, i) => {
+			const key = `${anioActual}-${String(i + 1).padStart(2, '0')}`;
+			const cxc = datosCxc?.meses.find(m => m.mes === key);
+			return cxc != null ? cxc.saldo_final : 0;
+		});
+		const prev = MESES_CORTOS.map((_, i) => {
+			const key = `${anioActual - 1}-${String(i + 1).padStart(2, '0')}`;
+			const cxc = datosCxc?.meses.find(m => m.mes === key);
+			return cxc != null ? cxc.saldo_final : 0;
+		});
+		const c = new Chart(canvasCxc, makeLineConfig(current, prev, '#7c3aed', 'rgba(124,58,237,0.10)') as any);
+		chartCxc = c;
+		return () => { c.destroy(); };
+	});
+
+	onDestroy(() => {
+		chartMes?.destroy();
+		chartVentasContado?.destroy();
+		chartGastos?.destroy();
+		chartAbonos?.destroy();
+		chartBalance?.destroy();
+		chartInventario?.destroy();
+		chartCxc?.destroy();
+	});
 
 	function fmtDelta(d: number | null): string {
 		if (d === null) return '—';
@@ -329,6 +422,11 @@
 	function deltaClass(d: number | null): string {
 		if (d === null) return 'text-slate-300';
 		return d >= 0 ? 'text-green' : 'text-red-500';
+	}
+	function fmtCompact(val: number): string {
+		if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
+		if (val >= 1_000)     return `$${(val / 1_000).toFixed(0)}K`;
+		return formatMXN(val);
 	}
 </script>
 
@@ -569,6 +667,20 @@
 						</div>
 					</div>
 
+					<!-- Balance mes seleccionado año anterior -->
+					<div class="bg-surface rounded border border-slate-200 border-l-[3px] px-4 py-3 flex items-center justify-between animate-fadeSlide overflow-hidden"
+						style="border-left-color: {balancePrevio >= 0 ? '#1f9254' : '#ef4444'}">
+						<div>
+							<p class="text-[8px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400 mb-0.5">Balance General {anioActual - 1}</p>
+							<p class="text-[9px] font-mono text-slate-400">Ventas + Abonos − Gastos</p>
+						</div>
+						<div class="text-right">
+							<span class="font-barlow-condensed text-[28px] font-bold leading-none {balancePrevio >= 0 ? 'text-green' : 'text-red-500'}">
+								{formatMXN(balancePrevio)}
+							</span>
+						</div>
+					</div>
+
 					<!-- Tablas detalle Inventario y CXC -->
 					<div class="grid grid-cols-2 gap-3 animate-fadeSlide">
 
@@ -661,126 +773,119 @@
 
 				{:else}
 
-					<!-- ── VISIÓN GENERAL ── -->
+					<!-- ── VISIÓN GENERAL — grid 2 columnas ── -->
+					<div class="grid grid-cols-2 gap-3">
 
-					<!-- Gráfico tendencia anual -->
-					<p class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-slate-400 animate-fadeSlide" style="animation-delay: 40ms">Gráfica</p>
-					<div class="bg-surface rounded p-4 border border-slate-200 animate-fadeSlide" style="animation-delay: 60ms">
-						<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400 mb-3">
-							TENDENCIA ANUAL — {anioActual} vs {anioActual - 1}
-						</p>
-						<div class="relative h-48 sm:h-60">
-							<canvas bind:this={canvasAnual}></canvas>
-						</div>
-					</div>
+						<!-- ══ COLUMNA IZQUIERDA: 4 tarjetas de gráficas ══ -->
+						<div class="flex flex-col gap-3">
 
-					<!-- Tabla 12 meses -->
-					<p class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-slate-400 animate-fadeSlide" style="animation-delay: 80ms">Desglose</p>
-					<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide" style="animation-delay: 100ms">
-
-						<!-- Cabecera: row de categorías -->
-						<div class="grid grid-cols-[1.4fr_1.7fr_1.7fr_1.7fr_0.9fr_0.9fr] bg-bg border-b border-slate-100 px-3 pt-2 pb-0.5 gap-1.5">
-							<span></span>
-							<span class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-green text-right">Ventas</span>
-							<span class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-amber text-right">Compras</span>
-							<span class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-violet-500 text-right">Abonos</span>
-							<span class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-teal-600 text-right">Inventario</span>
-							<span class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-violet-500 text-right">CXC</span>
-						</div>
-						<!-- Cabecera: row de años -->
-						<div class="grid grid-cols-[1.4fr_0.95fr_0.75fr_0.95fr_0.75fr_0.95fr_0.75fr_0.9fr_0.9fr] bg-bg border-b border-slate-200 px-3 pt-0.5 pb-2 gap-1.5">
-							<span class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-slate-400">Mes</span>
-							<span class="text-[8px] font-mono text-green/70 text-right">{anioActual}</span>
-							<span class="text-[8px] font-mono text-slate-400 text-right">{anioActual - 1}</span>
-							<span class="text-[8px] font-mono text-amber/70 text-right">{anioActual}</span>
-							<span class="text-[8px] font-mono text-slate-400 text-right">{anioActual - 1}</span>
-							<span class="text-[8px] font-mono text-violet-400/70 text-right">{anioActual}</span>
-							<span class="text-[8px] font-mono text-slate-400 text-right">{anioActual - 1}</span>
-							<span></span>
-							<span></span>
-						</div>
-
-						<!-- Filas mensuales -->
-						{#each filasMeses as fila}
-							{@const esActual = fila.idx === mesActual}
-							<div
-								class="grid grid-cols-[1.4fr_0.95fr_0.75fr_0.95fr_0.75fr_0.95fr_0.75fr_0.9fr_0.9fr] px-3 py-1.5 gap-1.5 border-b border-slate-50 items-center
-									{esActual ? 'bg-amber/[0.035] border-l-[3px] border-amber' : 'border-l-[3px] border-transparent'}"
-							>
-								<span class="text-[12px] {esActual ? 'text-navy font-semibold' : 'text-slate-600'} font-barlow truncate">
-									{fila.nombre}
-								</span>
-								<div class="flex flex-col items-end">
-									<span class="font-mono text-[11px] text-navy">{formatMXN(fila.act.ventas_importe)}</span>
-									<span class="font-mono text-[9px] {deltaClass(fila.deltaV)}">{fmtDelta(fila.deltaV)}</span>
+							<!-- Ventas Contado -->
+							<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide" style="animation-delay: 40ms">
+								<div class="flex items-center gap-2 px-3 pt-2.5 pb-0">
+									<div class="w-[3px] h-5 rounded-full flex-shrink-0" style="background:#1f9254"></div>
+									<span class="text-[11px] font-mono font-semibold text-slate-600 flex-1 truncate">Ventas Contado</span>
+									<span class="font-barlow-condensed text-[14px] font-bold whitespace-nowrap" style="color:#1f9254">{formatMXN(datosActual.total_ventas)}</span>
+									<span class="text-[10px] font-mono text-slate-400 whitespace-nowrap">{MESES_CORTOS[mesActual]}·{fmtCompact(mesActualVentasContado)}</span>
 								</div>
-								<span class="font-mono text-[10px] text-slate-400 text-right">{formatMXN(fila.ant.ventas_importe)}</span>
-								<div class="flex flex-col items-end">
-									<span class="font-mono text-[11px] text-navy">{formatMXN(fila.act.compras_importe)}</span>
-									<span class="font-mono text-[9px] {deltaClass(fila.deltaC)}">{fmtDelta(fila.deltaC)}</span>
+								<div class="relative h-[176px] px-1 pb-1">
+									<canvas bind:this={canvasVentasContado}></canvas>
 								</div>
-								<span class="font-mono text-[10px] text-slate-400 text-right">{formatMXN(fila.ant.compras_importe)}</span>
-								<div class="flex flex-col items-end">
-									<span class="font-mono text-[11px] text-navy">{formatMXN(fila.act.abonos_importe)}</span>
-									<span class="font-mono text-[9px] {deltaClass(fila.deltaA)}">{fmtDelta(fila.deltaA)}</span>
-								</div>
-								<span class="font-mono text-[10px] text-slate-400 text-right">{formatMXN(fila.ant.abonos_importe)}</span>
-								<span class="font-mono text-[11px] text-right {fila.difInv === null ? 'text-slate-300' : fila.difInv >= 0 ? 'text-teal-600' : 'text-red-500'}">
-									{fila.difInv !== null ? formatMXN(fila.difInv) : '—'}
-								</span>
-								<span class="font-mono text-[11px] text-right {fila.difCxc === null ? 'text-slate-300' : fila.difCxc >= 0 ? 'text-violet-600' : 'text-red-500'}">
-									{fila.difCxc !== null ? formatMXN(fila.difCxc) : '—'}
-								</span>
 							</div>
-						{/each}
 
-						<!-- Fila de totales -->
-						<div class="grid grid-cols-[1.4fr_0.95fr_0.75fr_0.95fr_0.75fr_0.95fr_0.75fr_0.9fr_0.9fr] px-3 py-2.5 gap-1.5 items-center bg-navy/[0.05] border-t-2 border-navy/20">
-							<span class="text-[10px] font-mono font-bold text-slate-500 uppercase tracking-wider">Total</span>
-							<div class="flex flex-col items-end">
-								<span class="font-mono text-[12px] font-bold text-green">{formatMXN(datosActual.total_ventas)}</span>
-								<span class="font-mono text-[9px] {deltaClass(deltaVentasAnual)}">{fmtDelta(deltaVentasAnual)}</span>
+							<!-- Gastos -->
+							<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide" style="animation-delay: 80ms">
+								<div class="flex items-center gap-2 px-3 pt-2.5 pb-0">
+									<div class="w-[3px] h-5 rounded-full flex-shrink-0" style="background:#e8820a"></div>
+									<span class="text-[11px] font-mono font-semibold text-slate-600 flex-1 truncate">Gastos</span>
+									<span class="font-barlow-condensed text-[14px] font-bold whitespace-nowrap" style="color:#e8820a">{formatMXN(datosActual.total_compras)}</span>
+									<span class="text-[10px] font-mono text-slate-400 whitespace-nowrap">{MESES_CORTOS[mesActual]}·{fmtCompact(mesActualGastos)}</span>
+								</div>
+								<div class="relative h-[176px] px-1 pb-1">
+									<canvas bind:this={canvasGastos}></canvas>
+								</div>
 							</div>
-							<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(datosAnioAnterior?.total_ventas ?? 0)}</span>
-							<div class="flex flex-col items-end">
-								<span class="font-mono text-[12px] font-bold text-amber">{formatMXN(datosActual.total_compras)}</span>
-								<span class="font-mono text-[9px] {deltaClass(deltaComprasAnual)}">{fmtDelta(deltaComprasAnual)}</span>
+
+							<!-- Abonos -->
+							<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide" style="animation-delay: 100ms">
+								<div class="flex items-center gap-2 px-3 pt-2.5 pb-0">
+									<div class="w-[3px] h-5 rounded-full flex-shrink-0" style="background:#14b8a6"></div>
+									<span class="text-[11px] font-mono font-semibold text-slate-600 flex-1 truncate">Abonos</span>
+									<span class="font-barlow-condensed text-[14px] font-bold whitespace-nowrap" style="color:#14b8a6">{formatMXN(datosActual.total_abonos)}</span>
+									<span class="text-[10px] font-mono text-slate-400 whitespace-nowrap">{MESES_CORTOS[mesActual]}·{fmtCompact(mesActualAbonos)}</span>
+								</div>
+								<div class="relative h-[176px] px-1 pb-1">
+									<canvas bind:this={canvasAbonos}></canvas>
+								</div>
 							</div>
-							<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(datosAnioAnterior?.total_compras ?? 0)}</span>
-							<div class="flex flex-col items-end">
-								<span class="font-mono text-[12px] font-bold text-violet-600">{formatMXN(datosActual.total_abonos)}</span>
-								<span class="font-mono text-[9px] {deltaClass(deltaAbonosAnual)}">{fmtDelta(deltaAbonosAnual)}</span>
+
+							<!-- Balance General anual -->
+							<div class="bg-surface rounded border border-slate-200 border-l-[3px] px-4 py-3 flex items-center justify-between animate-fadeSlide overflow-hidden"
+								style="animation-delay: 120ms; border-left-color: {balAnual >= 0 ? '#1f9254' : '#ef4444'}">
+								<div>
+									<p class="text-[8px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400">Balance General {anioActual}</p>
+								</div>
+								<div class="text-right">
+									<span class="font-barlow-condensed text-[34px] font-bold leading-none {balAnual >= 0 ? 'text-green' : 'text-red-500'}">
+										{formatMXN(balAnual)}
+									</span>
+									{#if deltaBalAnual !== null}
+										<p class="text-[9px] font-mono {deltaBalAnual >= 0 ? 'text-green' : 'text-red-400'} mt-0.5">
+											{deltaBalAnual >= 0 ? '↑' : '↓'} {Math.abs(deltaBalAnual).toFixed(1)}% vs {anioActual - 1}
+										</p>
+									{/if}
+								</div>
 							</div>
-							<span class="font-mono text-[11px] text-slate-400 text-right">{formatMXN(datosAnioAnterior?.total_abonos ?? 0)}</span>
-							<span class="font-mono text-[12px] font-bold text-right {totalInvAnual === null ? 'text-slate-300' : totalInvAnual >= 0 ? 'text-teal-600' : 'text-red-500'}">
-								{totalInvAnual !== null ? formatMXN(totalInvAnual) : '—'}
-							</span>
-							<span class="font-mono text-[12px] font-bold text-right {totalCxcAnual === null ? 'text-slate-300' : totalCxcAnual >= 0 ? 'text-violet-600' : 'text-red-500'}">
-								{totalCxcAnual !== null ? formatMXN(totalCxcAnual) : '—'}
-							</span>
+
 						</div>
+						<!-- FIN COLUMNA IZQUIERDA -->
+
+						<!-- ══ COLUMNA DERECHA: 3 gráficas ══ -->
+						<div class="flex flex-col gap-3">
+
+							<!-- Balance General -->
+							<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide" style="animation-delay: 40ms">
+								<div class="flex items-center gap-2 px-3 pt-2.5 pb-0">
+									<div class="w-[3px] h-5 rounded-full flex-shrink-0" style="background:#334155"></div>
+									<span class="text-[11px] font-mono font-semibold text-slate-600 flex-1 truncate">Balance General</span>
+									<span class="font-barlow-condensed text-[14px] font-bold whitespace-nowrap {balAnual >= 0 ? 'text-green' : 'text-red-500'}">{formatMXN(balAnual)}</span>
+									<span class="text-[10px] font-mono text-slate-400 whitespace-nowrap">{MESES_CORTOS[mesActual]}·{fmtCompact(mesActualBalance)}</span>
+								</div>
+								<div class="relative h-[176px] px-1 pb-1">
+									<canvas bind:this={canvasBalance}></canvas>
+								</div>
+							</div>
+
+							<!-- Inventario -->
+							<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide" style="animation-delay: 60ms">
+								<div class="flex items-center gap-2 px-3 pt-2.5 pb-0">
+									<div class="w-[3px] h-5 rounded-full flex-shrink-0" style="background:#14b8a6"></div>
+									<span class="text-[11px] font-mono font-semibold text-slate-600 flex-1 truncate">Inventario</span>
+									<span class="font-barlow-condensed text-[14px] font-bold whitespace-nowrap {(saldoFinalInv ?? 0) >= 0 ? 'text-teal-600' : 'text-red-500'}">{saldoFinalInv !== null ? formatMXN(saldoFinalInv) : '—'}</span>
+									<span class="text-[10px] font-mono text-slate-400 whitespace-nowrap">{MESES_CORTOS[mesActual]}·{mesActualInv !== null ? fmtCompact(mesActualInv) : '—'}</span>
+								</div>
+								<div class="relative h-[176px] px-1 pb-1">
+									<canvas bind:this={canvasInventario}></canvas>
+								</div>
+							</div>
+
+							<!-- CXC -->
+							<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide" style="animation-delay: 80ms">
+								<div class="flex items-center gap-2 px-3 pt-2.5 pb-0">
+									<div class="w-[3px] h-5 rounded-full flex-shrink-0" style="background:#7c3aed"></div>
+									<span class="text-[11px] font-mono font-semibold text-slate-600 flex-1 truncate">Cuentas por Cobrar</span>
+									<span class="font-barlow-condensed text-[14px] font-bold whitespace-nowrap {(saldoFinalCxc ?? 0) >= 0 ? 'text-violet-600' : 'text-red-500'}">{saldoFinalCxc !== null ? formatMXN(saldoFinalCxc) : '—'}</span>
+									<span class="text-[10px] font-mono text-slate-400 whitespace-nowrap">{MESES_CORTOS[mesActual]}·{mesActualCxc !== null ? fmtCompact(mesActualCxc) : '—'}</span>
+								</div>
+								<div class="relative h-[176px] px-1 pb-1">
+									<canvas bind:this={canvasCxc}></canvas>
+								</div>
+							</div>
+
+						</div>
+						<!-- FIN COLUMNA DERECHA -->
 
 					</div>
-
-					<!-- Balance General anual -->
-					<p class="text-[9px] font-mono font-bold tracking-[0.14em] uppercase text-slate-400 animate-fadeSlide" style="animation-delay: 120ms">Resumen</p>
-					<div class="bg-surface rounded border border-slate-200 border-l-[3px] px-4 py-3 flex items-center justify-between animate-fadeSlide overflow-hidden"
-						style="animation-delay: 140ms; border-left-color: {balAnual >= 0 ? '#1f9254' : '#ef4444'}">
-						<div>
-							<p class="text-[8px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400 mb-0.5">Balance General {anioActual}</p>
-							<p class="text-[9px] font-mono text-slate-400">Ventas + Abonos − Gastos</p>
-						</div>
-						<div class="text-right">
-							<span class="font-barlow-condensed text-[34px] font-bold leading-none {balAnual >= 0 ? 'text-green' : 'text-red-500'}">
-								{formatMXN(balAnual)}
-							</span>
-							{#if deltaBalAnual !== null}
-								<p class="text-[9px] font-mono {deltaBalAnual >= 0 ? 'text-green' : 'text-red-400'} mt-0.5">
-									{deltaBalAnual >= 0 ? '↑' : '↓'} {Math.abs(deltaBalAnual).toFixed(1)}% vs {anioActual - 1}
-								</p>
-							{/if}
-						</div>
-					</div>
+					<!-- FIN VISIÓN GENERAL GRID -->
 
 				{/if}
 

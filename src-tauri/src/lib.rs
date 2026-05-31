@@ -152,22 +152,16 @@ async fn save_config(
 // ── Comandos DBF ───────────────────────────────────────────────
 
 #[derive(serde::Serialize)]
-struct DbfPaths {
-    dbf_arts: Option<String>,
-    dbf_unidades: Option<String>,
-    dbf_docum: Option<String>,
-    dbf_cxc: Option<String>,
+struct SucursalesConfig {
     sucursales: Vec<config::SucursalConfig>,
+    default_numalm: Option<String>,
 }
 
 #[tauri::command]
-fn get_dbf_paths() -> DbfPaths {
+fn get_dbf_paths() -> SucursalesConfig {
     let cfg = AppConfig::load().ok();
-    DbfPaths {
-        dbf_arts: cfg.as_ref().and_then(|c| c.dbf_arts.clone()),
-        dbf_unidades: cfg.as_ref().and_then(|c| c.dbf_unidades.clone()),
-        dbf_docum: cfg.as_ref().and_then(|c| c.dbf_docum.clone()),
-        dbf_cxc: cfg.as_ref().and_then(|c| c.dbf_cxc.clone()),
+    SucursalesConfig {
+        default_numalm: cfg.as_ref().and_then(|c| c.default_numalm.clone()),
         sucursales: cfg
             .as_ref()
             .map(|c| c.sucursales.clone())
@@ -176,23 +170,13 @@ fn get_dbf_paths() -> DbfPaths {
 }
 
 #[tauri::command]
-fn save_dbf_arts(path: String) -> Result<(), String> {
-    AppConfig::update_field("dbf_arts", &path).map_err(|e| e.to_string())
+fn save_sucursal_dbf_path(numalm: String, path: String) -> Result<(), String> {
+    AppConfig::update_sucursal_dbf_path(&numalm, &path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn save_dbf_unidades(path: String) -> Result<(), String> {
-    AppConfig::update_field("dbf_unidades", &path).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn save_dbf_docum(path: String) -> Result<(), String> {
-    AppConfig::update_field("dbf_docum", &path).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn save_dbf_cxc(path: String) -> Result<(), String> {
-    AppConfig::update_field("dbf_cxc", &path).map_err(|e| e.to_string())
+fn save_default_numalm(numalm: String) -> Result<(), String> {
+    AppConfig::update_default_numalm(&numalm).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -439,10 +423,11 @@ fn get_estadisticas_docum(
     use std::path::Path;
 
     let cfg = AppConfig::load().ok();
+    let numalm_str = numalm.as_deref().unwrap_or("");
     let docum_path = cfg
         .as_ref()
-        .and_then(|c| c.dbf_docum.as_deref())
-        .ok_or_else(|| "Archivo de documentos no configurado".to_string())?;
+        .and_then(|c| c.docum_path_for(numalm_str))
+        .ok_or_else(|| "Archivo Docum.DBF no configurado para este almacén".to_string())?;
 
     let from_date = fecha_from
         .as_deref()
@@ -451,7 +436,7 @@ fn get_estadisticas_docum(
         .as_deref()
         .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
 
-    let docs = dbf_reader::read_documentos(Path::new(docum_path), from_date, to_date)
+    let docs = dbf_reader::read_documentos(Path::new(&docum_path), from_date, to_date)
         .map_err(|e| e.to_string())?;
 
     let branch_filter = numalm
@@ -463,8 +448,8 @@ fn get_estadisticas_docum(
     });
     let cxc_records = cfg
         .as_ref()
-        .and_then(|c| c.dbf_cxc.as_deref())
-        .and_then(|p| dbf_reader::read_cxc(std::path::Path::new(p), cxc_min).ok())
+        .and_then(|c| c.cxc_path_for(numalm_str))
+        .and_then(|p| dbf_reader::read_cxc(std::path::Path::new(&p), cxc_min).ok())
         .unwrap_or_default();
 
     let from = from_date.unwrap_or(chrono::NaiveDate::from_ymd_opt(1900, 1, 1).unwrap());
@@ -489,17 +474,18 @@ fn get_estadisticas_dos_anios(
     use std::path::Path;
 
     let cfg = AppConfig::load().ok();
-    let docum_path = cfg
+    let numalm_str = numalm.as_deref().unwrap_or("");
+    let docum_path: String = cfg
         .as_ref()
-        .and_then(|c| c.dbf_docum.as_deref())
-        .ok_or_else(|| "Archivo de documentos no configurado".to_string())?;
+        .and_then(|c| c.docum_path_for(numalm_str))
+        .ok_or_else(|| "Archivo Docum.DBF no configurado para este almacén".to_string())?;
 
     let from_prev = NaiveDate::from_ymd_opt(anio - 1, 1, 1).unwrap();
     let to_curr = NaiveDate::from_ymd_opt(anio, 12, 31).unwrap();
 
     // Caché: re-leer solo si el archivo cambió (mtime) o cambió el año
     let docs = {
-        let mtime = std::fs::metadata(docum_path)
+        let mtime = std::fs::metadata(&docum_path)
             .and_then(|m| m.modified())
             .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
 
@@ -512,10 +498,10 @@ fn get_estadisticas_dos_anios(
             cache.as_ref().unwrap().docs.clone()
         } else {
             let docs =
-                dbf_reader::read_documentos(Path::new(docum_path), Some(from_prev), Some(to_curr))
+                dbf_reader::read_documentos(Path::new(&docum_path), Some(from_prev), Some(to_curr))
                     .map_err(|e| e.to_string())?;
             *cache = Some(DocumCacheEntry {
-                path: docum_path.to_string(),
+                path: docum_path.clone(),
                 mtime,
                 anio,
                 docs: docs.clone(),
@@ -531,8 +517,8 @@ fn get_estadisticas_dos_anios(
     let cxc_min = NaiveDate::from_ymd_opt(anio - 2, 1, 1);
     let cxc_records = cfg
         .as_ref()
-        .and_then(|c| c.dbf_cxc.as_deref())
-        .and_then(|p| dbf_reader::read_cxc(Path::new(p), cxc_min).ok())
+        .and_then(|c| c.cxc_path_for(numalm_str))
+        .and_then(|p| dbf_reader::read_cxc(Path::new(&p), cxc_min).ok())
         .unwrap_or_default();
 
     let from_curr = NaiveDate::from_ymd_opt(anio, 1, 1).unwrap();
@@ -553,26 +539,27 @@ struct FraccionesInitData {
 }
 
 #[tauri::command]
-fn get_fracciones_init_data() -> Result<FraccionesInitData, String> {
+fn get_fracciones_init_data(numalm: Option<String>) -> Result<FraccionesInitData, String> {
     use std::collections::HashMap;
     use std::path::Path;
 
     let cfg = AppConfig::load().ok();
+    let numalm_str = numalm.as_deref().unwrap_or("");
 
     let arts_path = cfg
         .as_ref()
-        .and_then(|c| c.dbf_arts.as_deref())
-        .ok_or_else(|| "Archivo de artículos no configurado".to_string())?;
+        .and_then(|c| c.arts_path_for(numalm_str))
+        .ok_or_else(|| "Carpeta DBF no configurada para este almacén".to_string())?;
 
     let unidades_path = cfg
         .as_ref()
-        .and_then(|c| c.dbf_unidades.as_deref())
-        .ok_or_else(|| "Archivo de fracciones no configurado".to_string())?;
+        .and_then(|c| c.unidades_path_for(numalm_str))
+        .ok_or_else(|| "Carpeta DBF no configurada para este almacén".to_string())?;
 
     let articulos_raw =
-        dbf_reader::read_articulos(Path::new(arts_path)).map_err(|e| e.to_string())?;
+        dbf_reader::read_articulos(Path::new(&arts_path)).map_err(|e| e.to_string())?;
     let unidades =
-        dbf_reader::read_unidades(Path::new(unidades_path)).map_err(|e| e.to_string())?;
+        dbf_reader::read_unidades(Path::new(&unidades_path)).map_err(|e| e.to_string())?;
 
     let arts_map: HashMap<String, &models::Articulo> = articulos_raw
         .iter()
@@ -851,8 +838,8 @@ pub fn run() {
             save_config,
             init_client,
             get_dbf_paths,
-            save_dbf_arts,
-            save_dbf_unidades,
+            save_sucursal_dbf_path,
+            save_default_numalm,
             get_fracciones_init_data,
             save_fraccion_pairing,
             delete_fraccion_pairing,
@@ -871,8 +858,6 @@ pub fn run() {
             export_seguimientos_xlsx,
             parse_seguimientos_xlsx,
             import_seguimientos,
-            save_dbf_docum,
-            save_dbf_cxc,
             get_estadisticas_docum,
             get_estadisticas_dos_anios,
             get_estadisticas_inventario_detalle,

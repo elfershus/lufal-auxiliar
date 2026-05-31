@@ -6,6 +6,8 @@ use std::path::PathBuf;
 pub struct SucursalConfig {
     pub numalm: String,
     pub letra: String,
+    #[serde(default)]
+    pub dbf_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -13,23 +15,38 @@ pub struct AppConfig {
     pub grpc_endpoint: String,
     pub api_key: String,
     #[serde(default)]
-    pub dbf_arts: Option<String>,
-    #[serde(default)]
-    pub dbf_unidades: Option<String>,
-    #[serde(default)]
-    pub dbf_docum: Option<String>,
-    #[serde(default)]
-    pub dbf_cxc: Option<String>,
+    pub default_numalm: Option<String>,
     #[serde(default)]
     pub sucursales: Vec<SucursalConfig>,
 }
 
 impl AppConfig {
-    /// Carga la configuración desde:
-    ///   1. Variables de entorno GRPC_ENDPOINT y API_KEY (desarrollo)
-    ///   2. %APPDATA%\lufal-auxiliar-desktop\config.toml (producción)
+    pub fn dbf_path_for<'a>(&'a self, numalm: &str) -> Option<&'a str> {
+        self.sucursales
+            .iter()
+            .find(|s| s.numalm.trim() == numalm.trim())
+            .and_then(|s| s.dbf_path.as_deref())
+    }
+
+    pub fn docum_path_for(&self, numalm: &str) -> Option<String> {
+        self.dbf_path_for(numalm).map(|p| format!("{}\\Docum.DBF", p))
+    }
+
+    pub fn cxc_path_for(&self, numalm: &str) -> Option<String> {
+        self.dbf_path_for(numalm).map(|p| format!("{}\\CXC.DBF", p))
+    }
+
+    pub fn arts_path_for(&self, numalm: &str) -> Option<String> {
+        self.dbf_path_for(numalm).map(|p| format!("{}\\Arts.DBF", p))
+    }
+
+    pub fn unidades_path_for(&self, numalm: &str) -> Option<String> {
+        self.dbf_path_for(numalm).map(|p| format!("{}\\Unidades.DBF", p))
+    }
+}
+
+impl AppConfig {
     pub fn load() -> Result<Self> {
-        // Override por env vars (útil en desarrollo)
         if let (Ok(ep), Ok(key)) = (
             std::env::var("GRPC_ENDPOINT"),
             std::env::var("API_KEY"),
@@ -37,10 +54,7 @@ impl AppConfig {
             return Ok(AppConfig {
                 grpc_endpoint: ep,
                 api_key: key,
-                dbf_arts: std::env::var("DBF_ARTS").ok(),
-                dbf_unidades: std::env::var("DBF_UNIDADES").ok(),
-                dbf_docum: std::env::var("DBF_DOCUM").ok(),
-                dbf_cxc: std::env::var("DBF_CXC").ok(),
+                default_numalm: std::env::var("DEFAULT_NUMALM").ok(),
                 sucursales: vec![],
             });
         }
@@ -85,8 +99,30 @@ impl AppConfig {
         dirs::config_dir().map(|d| d.join("lufal-auxiliar-desktop").join("config.toml"))
     }
 
-    /// Actualiza un campo DBF en el TOML preservando todos los demás campos.
-    pub fn update_field(key: &str, value: &str) -> Result<()> {
+    /// Carga el config existente como tabla TOML (o tabla vacía si no existe).
+    fn load_table() -> toml::map::Map<String, toml::Value> {
+        let config_path = match Self::config_path() {
+            Some(p) => p,
+            None => return toml::map::Map::new(),
+        };
+        if !config_path.exists() {
+            return toml::map::Map::new();
+        }
+        std::fs::read_to_string(&config_path)
+            .ok()
+            .and_then(|raw| toml::from_str::<toml::Value>(&raw).ok())
+            .and_then(|v| v.as_table().cloned())
+            .unwrap_or_default()
+    }
+
+    /// Reescribe el TOML completo preservando todos los campos escalares y
+    /// la lista de sucursales con sus dbf_path existentes.
+    fn write_config(
+        grpc_endpoint: &str,
+        api_key: &str,
+        default_numalm: Option<&str>,
+        sucursales: &[SucursalConfig],
+    ) -> Result<()> {
         let config_path = Self::config_path()
             .context("No se pudo determinar el directorio de configuración")?;
 
@@ -95,94 +131,33 @@ impl AppConfig {
                 .context("No se pudo crear el directorio de configuración")?;
         }
 
-        let existing = if config_path.exists() {
-            std::fs::read_to_string(&config_path)
-                .ok()
-                .and_then(|raw| toml::from_str::<toml::Value>(&raw).ok())
-                .and_then(|v| v.as_table().cloned())
-        } else {
-            None
-        };
-
-        let grpc_endpoint = existing
-            .as_ref()
-            .and_then(|t| t.get("grpc_endpoint"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let api_key = existing
-            .as_ref()
-            .and_then(|t| t.get("api_key"))
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let dbf_arts = if key == "dbf_arts" {
-            value.to_string()
-        } else {
-            existing
-                .as_ref()
-                .and_then(|t| t.get("dbf_arts"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string()
-        };
-
-        let dbf_unidades = if key == "dbf_unidades" {
-            value.to_string()
-        } else {
-            existing
-                .as_ref()
-                .and_then(|t| t.get("dbf_unidades"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string()
-        };
-
-        let dbf_docum = if key == "dbf_docum" {
-            value.to_string()
-        } else {
-            existing
-                .as_ref()
-                .and_then(|t| t.get("dbf_docum"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string()
-        };
-
-        let dbf_cxc = if key == "dbf_cxc" {
-            value.to_string()
-        } else {
-            existing
-                .as_ref()
-                .and_then(|t| t.get("dbf_cxc"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string()
-        };
-
         let mut content = format!(
             "grpc_endpoint = \"{}\"\napi_key       = \"{}\"\n",
             grpc_endpoint, api_key
         );
 
-        if !dbf_arts.is_empty() {
-            // Escape backslashes for TOML
-            let escaped = dbf_arts.replace('\\', "\\\\");
-            content.push_str(&format!("dbf_arts      = \"{}\"\n", escaped));
+        if let Some(dn) = default_numalm {
+            if !dn.is_empty() {
+                content.push_str(&format!("default_numalm = \"{}\"\n", dn));
+            }
         }
-        if !dbf_unidades.is_empty() {
-            let escaped = dbf_unidades.replace('\\', "\\\\");
-            content.push_str(&format!("dbf_unidades  = \"{}\"\n", escaped));
-        }
-        if !dbf_docum.is_empty() {
-            let escaped = dbf_docum.replace('\\', "\\\\");
-            content.push_str(&format!("dbf_docum     = \"{}\"\n", escaped));
-        }
-        if !dbf_cxc.is_empty() {
-            let escaped = dbf_cxc.replace('\\', "\\\\");
-            content.push_str(&format!("dbf_cxc       = \"{}\"\n", escaped));
+
+        for s in sucursales {
+            let letra = s.letra.trim().chars().next().unwrap_or(' ');
+            if letra == ' ' {
+                continue;
+            }
+            content.push_str(&format!(
+                "\n[[sucursales]]\nnumalm = \"{}\"\nletra  = \"{}\"\n",
+                s.numalm.trim(),
+                letra
+            ));
+            if let Some(dp) = &s.dbf_path {
+                if !dp.is_empty() {
+                    let escaped = dp.replace('\\', "\\\\");
+                    content.push_str(&format!("dbf_path = \"{}\"\n", escaped));
+                }
+            }
         }
 
         std::fs::write(&config_path, content)
@@ -192,71 +167,117 @@ impl AppConfig {
     }
 
     pub fn update_sucursales(entries: &[SucursalConfig]) -> Result<()> {
-        let config_path = Self::config_path()
-            .context("No se pudo determinar el directorio de configuración")?;
+        let existing = Self::load_table();
 
-        if let Some(parent) = config_path.parent() {
-            std::fs::create_dir_all(parent)
-                .context("No se pudo crear el directorio de configuración")?;
-        }
+        let grpc_endpoint = existing.get("grpc_endpoint")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let api_key = existing.get("api_key")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_numalm = existing.get("default_numalm")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
 
-        let existing = if config_path.exists() {
-            std::fs::read_to_string(&config_path)
-                .ok()
-                .and_then(|raw| toml::from_str::<toml::Value>(&raw).ok())
-                .and_then(|v| v.as_table().cloned())
-        } else {
-            None
-        };
+        // Preservar dbf_path existente por numalm
+        let existing_sucursales: Vec<SucursalConfig> = existing
+            .get("sucursales")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter().filter_map(|item| {
+                    let t = item.as_table()?;
+                    Some(SucursalConfig {
+                        numalm: t.get("numalm")?.as_str()?.trim().to_string(),
+                        letra: t.get("letra")?.as_str()?.trim().to_string(),
+                        dbf_path: t.get("dbf_path")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string()),
+                    })
+                }).collect()
+            })
+            .unwrap_or_default();
 
-        let grpc_endpoint = existing
-            .as_ref().and_then(|t| t.get("grpc_endpoint")).and_then(|v| v.as_str())
-            .unwrap_or("").to_string();
-        let api_key = existing
-            .as_ref().and_then(|t| t.get("api_key")).and_then(|v| v.as_str())
-            .unwrap_or("").to_string();
-        let dbf_arts = existing
-            .as_ref().and_then(|t| t.get("dbf_arts")).and_then(|v| v.as_str())
-            .unwrap_or("").to_string();
-        let dbf_unidades = existing
-            .as_ref().and_then(|t| t.get("dbf_unidades")).and_then(|v| v.as_str())
-            .unwrap_or("").to_string();
-        let dbf_docum = existing
-            .as_ref().and_then(|t| t.get("dbf_docum")).and_then(|v| v.as_str())
-            .unwrap_or("").to_string();
-        let dbf_cxc = existing
-            .as_ref().and_then(|t| t.get("dbf_cxc")).and_then(|v| v.as_str())
-            .unwrap_or("").to_string();
-
-        let mut content = format!(
-            "grpc_endpoint = \"{}\"\napi_key       = \"{}\"\n",
-            grpc_endpoint, api_key
-        );
-        if !dbf_arts.is_empty() {
-            content.push_str(&format!("dbf_arts      = \"{}\"\n", dbf_arts.replace('\\', "\\\\")));
-        }
-        if !dbf_unidades.is_empty() {
-            content.push_str(&format!("dbf_unidades  = \"{}\"\n", dbf_unidades.replace('\\', "\\\\")));
-        }
-        if !dbf_docum.is_empty() {
-            content.push_str(&format!("dbf_docum     = \"{}\"\n", dbf_docum.replace('\\', "\\\\")));
-        }
-        if !dbf_cxc.is_empty() {
-            content.push_str(&format!("dbf_cxc       = \"{}\"\n", dbf_cxc.replace('\\', "\\\\")));
-        }
-        for s in entries {
-            let letra = s.letra.trim().chars().next().unwrap_or(' ');
-            if letra != ' ' {
-                content.push_str(&format!(
-                    "\n[[sucursales]]\nnumalm = \"{}\"\nletra  = \"{}\"\n",
-                    s.numalm.trim(), letra
-                ));
+        // Merge: para cada entrada nueva, preservar dbf_path si no viene en el array
+        let merged: Vec<SucursalConfig> = entries.iter().map(|e| {
+            let existing_dp = existing_sucursales.iter()
+                .find(|ex| ex.numalm.trim() == e.numalm.trim())
+                .and_then(|ex| ex.dbf_path.clone());
+            SucursalConfig {
+                numalm: e.numalm.clone(),
+                letra: e.letra.clone(),
+                dbf_path: e.dbf_path.clone().or(existing_dp),
             }
+        }).collect();
+
+        Self::write_config(
+            &grpc_endpoint,
+            &api_key,
+            default_numalm.as_deref(),
+            &merged,
+        )
+    }
+
+    /// Actualiza la carpeta DBF de una sucursal específica.
+    pub fn update_sucursal_dbf_path(numalm: &str, path: &str) -> Result<()> {
+        let existing = Self::load_table();
+
+        let grpc_endpoint = existing.get("grpc_endpoint")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let api_key = existing.get("api_key")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_numalm = existing.get("default_numalm")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
+
+        let mut sucursales: Vec<SucursalConfig> = existing
+            .get("sucursales")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter().filter_map(|item| {
+                    let t = item.as_table()?;
+                    Some(SucursalConfig {
+                        numalm: t.get("numalm")?.as_str()?.trim().to_string(),
+                        letra: t.get("letra")?.as_str()?.trim().to_string(),
+                        dbf_path: t.get("dbf_path")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string()),
+                    })
+                }).collect()
+            })
+            .unwrap_or_default();
+
+        if let Some(s) = sucursales.iter_mut().find(|s| s.numalm.trim() == numalm.trim()) {
+            s.dbf_path = Some(path.to_string());
         }
 
-        std::fs::write(&config_path, content)
-            .with_context(|| format!("No se pudo escribir {:?}", config_path))?;
+        Self::write_config(&grpc_endpoint, &api_key, default_numalm.as_deref(), &sucursales)
+    }
 
-        Ok(())
+    /// Actualiza el almacén predeterminado.
+    pub fn update_default_numalm(numalm: &str) -> Result<()> {
+        let existing = Self::load_table();
+
+        let grpc_endpoint = existing.get("grpc_endpoint")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let api_key = existing.get("api_key")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        let sucursales: Vec<SucursalConfig> = existing
+            .get("sucursales")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter().filter_map(|item| {
+                    let t = item.as_table()?;
+                    Some(SucursalConfig {
+                        numalm: t.get("numalm")?.as_str()?.trim().to_string(),
+                        letra: t.get("letra")?.as_str()?.trim().to_string(),
+                        dbf_path: t.get("dbf_path")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string()),
+                    })
+                }).collect()
+            })
+            .unwrap_or_default();
+
+        Self::write_config(&grpc_endpoint, &api_key, Some(numalm), &sucursales)
     }
 }

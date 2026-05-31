@@ -5,7 +5,7 @@
     import { nav } from "../lib/nav.svelte.js";
     import {
         getFraccionesInitData,
-        getDbfPaths,
+        getSucursalesConfig,
         saveFraccionPairing,
         deleteFraccionPairing,
         createEtiqueta,
@@ -35,6 +35,7 @@
         VerifNivel,
         VerifFraccion,
     } from "../lib/types.js";
+    import { appConfig } from "../lib/config.svelte.js";
 
     interface Props {
         onGoConfig: () => void;
@@ -366,12 +367,16 @@
         articulos = [];
         todosArticulos = [];
         try {
-            const paths = await getDbfPaths();
-            if (!paths.dbf_arts || !paths.dbf_unidades) {
+            const cfg = await getSucursalesConfig();
+            const numalm = appConfig.numalm;
+            const hasCarpeta = cfg.sucursales.some(
+                (s) => s.numalm === numalm && s.dbf_path
+            );
+            if (!hasCarpeta) {
                 sinCarpeta = true;
                 return;
             }
-            const data = await getFraccionesInitData();
+            const data = await getFraccionesInitData(numalm);
             articulos = data.fracciones;
             todosArticulos = data.articulos;
             etiquetas = data.etiquetas;
@@ -1322,7 +1327,7 @@
                     Archivos DBF no configurados
                 </h2>
                 <p class="text-[13px] text-slate-400 mb-5 max-w-xs">
-                    Configura el archivo de artículos y el de fracciones en
+                    Configura la carpeta DBF en
                     Configuración.
                 </p>
                 <button

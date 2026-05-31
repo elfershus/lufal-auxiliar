@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import type { ArticuloFracciones, ArticuloSearchResult, CxcMensualAnioResult, DbfPaths, EstadisticasResult, EstadisticasDosAniosResult, Etiqueta, InventarioAnioResult, PairingRow, ParsePairingsResult, SeguimientoFraccionRow, ParseSeguimientosResult, SucursalEntry } from './types.js';
+import type { ArticuloFracciones, ArticuloSearchResult, CxcMensualAnioResult, SucursalesConfig, EstadisticasResult, EstadisticasDosAniosResult, Etiqueta, InventarioAnioResult, PairingRow, ParsePairingsResult, SeguimientoFraccionRow, ParseSeguimientosResult } from './types.js';
 
 export interface FraccionesInitData {
 	fracciones: ArticuloFracciones[];
@@ -9,27 +9,19 @@ export interface FraccionesInitData {
 	seguimientos: SeguimientoFraccionRow[];
 }
 
-export function getDbfPaths(): Promise<DbfPaths> {
+export function getSucursalesConfig(): Promise<SucursalesConfig> {
 	return invoke('get_dbf_paths');
 }
 
-export function saveDbfArts(path: string): Promise<void> {
-	return invoke('save_dbf_arts', { path });
+export function saveSucursalDbfPath(numalm: string, path: string): Promise<void> {
+	return invoke('save_sucursal_dbf_path', { numalm, path });
 }
 
-export function saveDbfUnidades(path: string): Promise<void> {
-	return invoke('save_dbf_unidades', { path });
+export function saveDefaultNumalm(numalm: string): Promise<void> {
+	return invoke('save_default_numalm', { numalm });
 }
 
-export function saveDbfDocum(path: string): Promise<void> {
-	return invoke('save_dbf_docum', { path });
-}
-
-export function saveDbfCxc(path: string): Promise<void> {
-	return invoke('save_dbf_cxc', { path });
-}
-
-export function saveSucursalesMap(mapping: SucursalEntry[]): Promise<void> {
+export function saveSucursalesMap(mapping: import('./types.js').SucursalEntry[]): Promise<void> {
 	return invoke('save_sucursales_map', { mapping });
 }
 
@@ -56,8 +48,8 @@ export function getEstadisticasCxcMensual(numalm?: string): Promise<CxcMensualAn
 	return invoke('get_estadisticas_cxc_mensual', { numalm: numalm ?? null });
 }
 
-export function getFraccionesInitData(): Promise<FraccionesInitData> {
-	return invoke('get_fracciones_init_data');
+export function getFraccionesInitData(numalm?: string): Promise<FraccionesInitData> {
+	return invoke('get_fracciones_init_data', { numalm: numalm ?? null });
 }
 
 export function saveFraccionPairing(

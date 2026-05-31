@@ -20,3 +20,18 @@ function createAppConfig() {
 }
 
 export const appConfig = createAppConfig();
+
+/** Al inicio de la app, sincroniza el almacén activo con default_numalm del config.toml.
+ *  Siempre sobreescribe localStorage para limpiar valores obsoletos de versiones anteriores. */
+export async function initNumalm(almacenes: { numalm: string; nomalm: string }[]) {
+	const { getSucursalesConfig } = await import('./dbf.js');
+	const cfg = await getSucursalesConfig();
+	if (cfg.default_numalm) {
+		appConfig.numalm = cfg.default_numalm;
+		const alm = almacenes.find((a) => a.numalm === cfg.default_numalm);
+		if (alm) appConfig.nomalm = alm.nomalm;
+	} else {
+		appConfig.numalm = '';
+		appConfig.nomalm = '';
+	}
+}
