@@ -206,7 +206,7 @@
 
 			{:else if errorMsg}
 				<div class="state-center">
-					<div style="color:#f87171;opacity:.65;">
+					<div style="color:#dc2626;opacity:.8;">
 						<svg class="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 							<circle cx="12" cy="12" r="10"/>
 							<line x1="12" y1="8" x2="12" y2="12"/>
@@ -388,7 +388,7 @@
 		display: flex;
 		height: 100vh;
 		overflow: hidden;
-		background: #090e17;
+		background: #e8edf2;
 	}
 
 	.panel {
@@ -399,21 +399,26 @@
 
 	.catalogue-panel {
 		width: 55%;
-		background: #0e1623;
-		border-right: 1px solid rgba(255, 255, 255, 0.13);
+		background: #ffffff;
+		border-right: 1px solid #dde3ea;
 	}
 
 	.queue-panel {
 		width: 45%;
-		background: #0a1120;
+		background: #f4f7fa;
 	}
 
 	/* ── Panel header ────────────────────────────────────── */
 	.panel-header {
 		padding: 14px 16px 12px;
-		background: rgba(0, 0, 0, 0.2);
-		border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+		background: #ffffff;
+		border-bottom: 1px solid #e4e9f0;
 		flex-shrink: 0;
+	}
+
+	.queue-panel .panel-header {
+		background: #f4f7fa;
+		border-bottom-color: #dde3ea;
 	}
 
 	.section-icon-wrap {
@@ -422,24 +427,24 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(20, 184, 166, 0.1);
-		border: 1px solid rgba(20, 184, 166, 0.2);
+		background: rgba(13, 148, 136, 0.1);
+		border: 1px solid rgba(13, 148, 136, 0.22);
 		border-radius: 7px;
-		color: #2dd4bf;
+		color: #0d9488;
 		flex-shrink: 0;
 	}
 
 	.section-icon-wrap.queue-icon {
-		background: rgba(225, 29, 72, 0.1);
-		border-color: rgba(225, 29, 72, 0.2);
-		color: #fb7185;
+		background: rgba(225, 29, 72, 0.08);
+		border-color: rgba(225, 29, 72, 0.22);
+		color: #e11d48;
 	}
 
 	.section-title {
 		font-family: 'Barlow Condensed', sans-serif;
 		font-size: 14px;
 		font-weight: 700;
-		color: rgba(255, 255, 255, 0.88);
+		color: #1e293b;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 		line-height: 1;
@@ -451,7 +456,7 @@
 		align-items: center;
 		gap: 5px;
 		font-size: 10.5px;
-		color: rgba(255, 255, 255, 0.45);
+		color: #94a3b8;
 		margin-top: 4px;
 		font-family: ui-monospace, monospace;
 		line-height: 1;
@@ -485,30 +490,31 @@
 		left: 10px;
 		width: 13px;
 		height: 13px;
-		color: rgba(255, 255, 255, 0.22);
+		color: #94a3b8;
 		pointer-events: none;
 	}
 
 	.search-input {
 		width: 100%;
 		padding: 7px 32px 7px 30px;
-		background: rgba(255, 255, 255, 0.05);
-		border: 1px solid rgba(255, 255, 255, 0.09);
+		background: #f1f5f9;
+		border: 1px solid #dde3ea;
 		border-radius: 7px;
 		font-size: 12px;
-		color: rgba(255, 255, 255, 0.8);
+		color: #1e293b;
 		outline: none;
 		transition: border-color 0.15s, background 0.15s;
 		font-family: inherit;
 	}
 
 	.search-input::placeholder {
-		color: rgba(255, 255, 255, 0.32);
+		color: #94a3b8;
 	}
 
 	.search-input:focus {
-		border-color: rgba(45, 212, 191, 0.4);
-		background: rgba(255, 255, 255, 0.07);
+		border-color: #0d9488;
+		background: #ffffff;
+		box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.08);
 	}
 
 	.search-clear {
@@ -519,7 +525,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: rgba(255, 255, 255, 0.25);
+		color: #94a3b8;
 		background: none;
 		border: none;
 		cursor: pointer;
@@ -533,7 +539,7 @@
 	}
 
 	.search-clear:hover {
-		color: rgba(255, 255, 255, 0.65);
+		color: #475569;
 	}
 
 	/* ── Panel body ──────────────────────────────────────── */
@@ -541,7 +547,7 @@
 		flex: 1;
 		overflow-y: auto;
 		scrollbar-width: thin;
-		scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+		scrollbar-color: #cbd5e1 transparent;
 	}
 
 	/* ── States ──────────────────────────────────────────── */
@@ -558,20 +564,20 @@
 
 	.state-text {
 		font-size: 12px;
-		color: rgba(255, 255, 255, 0.42);
+		color: #94a3b8;
 		text-align: center;
 	}
 
 	.empty-icon {
 		width: 38px;
 		height: 38px;
-		color: rgba(255, 255, 255, 0.08);
+		color: #cbd5e1;
 		margin-bottom: 4px;
 	}
 
 	.error-text {
 		font-size: 12px;
-		color: #f87171;
+		color: #dc2626;
 		text-align: center;
 		max-width: 280px;
 		line-height: 1.5;
@@ -581,16 +587,16 @@
 		margin-top: 4px;
 		padding: 5px 14px;
 		font-size: 11.5px;
-		color: #f87171;
-		background: rgba(248, 113, 113, 0.08);
-		border: 1px solid rgba(248, 113, 113, 0.22);
+		color: #dc2626;
+		background: #fef2f2;
+		border: 1px solid #fca5a5;
 		border-radius: 6px;
 		cursor: pointer;
 		transition: background 0.12s;
 	}
 
 	.btn-retry:hover {
-		background: rgba(248, 113, 113, 0.15);
+		background: #fee2e2;
 	}
 
 	/* Loading dots */
@@ -603,7 +609,7 @@
 	.loading-dots span {
 		width: 5px;
 		height: 5px;
-		background: rgba(255, 255, 255, 0.18);
+		background: #cbd5e1;
 		border-radius: 50%;
 		animation: dot-pulse 1.2s ease-in-out infinite;
 	}
@@ -612,7 +618,7 @@
 	.loading-dots span:nth-child(3) { animation-delay: 0.36s; }
 
 	@keyframes dot-pulse {
-		0%, 60%, 100% { opacity: 0.18; transform: scale(1); }
+		0%, 60%, 100% { opacity: 0.3; transform: scale(1); }
 		30% { opacity: 1; transform: scale(1.4); }
 	}
 
@@ -627,12 +633,12 @@
 		width: 100%;
 		text-align: left;
 		cursor: pointer;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		border-bottom: 1px solid #f1f5f9;
 		transition: background 0.1s ease, border-left-color 0.1s ease;
 	}
 
 	.art-row:hover {
-		background: rgba(255, 255, 255, 0.04);
+		background: #f8fafc;
 		border-left-color: #e11d48;
 	}
 
@@ -647,9 +653,9 @@
 		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.07em;
-		color: #fbbf24;
-		background: rgba(251, 191, 36, 0.09);
-		border: 1px solid rgba(251, 191, 36, 0.2);
+		color: #92400e;
+		background: #fef3c7;
+		border: 1px solid #fcd34d;
 		padding: 2px 6px;
 		border-radius: 4px;
 		line-height: 1.5;
@@ -657,7 +663,7 @@
 
 	.art-desc {
 		font-size: 12px;
-		color: rgba(255, 255, 255, 0.82);
+		color: #334155;
 		line-height: 1.35;
 		margin: 3px 0 3px;
 		overflow: hidden;
@@ -679,15 +685,15 @@
 	}
 
 	.barcode-chip.has-code {
-		color: #2dd4bf;
-		background: rgba(45, 212, 191, 0.07);
-		border-color: rgba(45, 212, 191, 0.18);
+		color: #0f766e;
+		background: #f0fdfa;
+		border-color: #99f6e4;
 	}
 
 	.barcode-chip.no-code {
-		color: #f87171;
-		background: rgba(248, 113, 113, 0.07);
-		border-color: rgba(248, 113, 113, 0.18);
+		color: #dc2626;
+		background: #fef2f2;
+		border-color: #fca5a5;
 	}
 
 	.add-btn {
@@ -698,32 +704,33 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: 50%;
-		background: rgba(255, 255, 255, 0.08);
-		color: rgba(255, 255, 255, 0.33);
+		background: #f1f5f9;
+		color: #94a3b8;
 		margin-top: 3px;
 		transition: background 0.1s, color 0.1s;
 	}
 
 	.art-row:hover .add-btn {
-		background: rgba(225, 29, 72, 0.15);
-		color: #fb7185;
+		background: rgba(225, 29, 72, 0.1);
+		color: #e11d48;
 	}
 
 	/* ── Load more ───────────────────────────────────────── */
 	.btn-load-more {
 		padding: 6px 16px;
 		font-size: 11.5px;
-		color: rgba(255, 255, 255, 0.35);
+		color: #64748b;
 		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.09);
+		border: 1px solid #dde3ea;
 		border-radius: 6px;
 		cursor: pointer;
 		transition: all 0.12s;
 	}
 
 	.btn-load-more:hover:not(:disabled) {
-		color: rgba(255, 255, 255, 0.65);
-		border-color: rgba(255, 255, 255, 0.18);
+		color: #334155;
+		border-color: #94a3b8;
+		background: #f8fafc;
 	}
 
 	.btn-load-more:disabled {
@@ -735,17 +742,18 @@
 	.btn-clear {
 		padding: 5px 11px;
 		font-size: 11.5px;
-		color: rgba(255, 255, 255, 0.50);
+		color: #64748b;
 		background: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.09);
+		border: 1px solid #dde3ea;
 		border-radius: 6px;
 		cursor: pointer;
 		transition: all 0.12s;
 	}
 
 	.btn-clear:hover {
-		color: rgba(255, 255, 255, 0.6);
-		border-color: rgba(255, 255, 255, 0.18);
+		color: #334155;
+		border-color: #94a3b8;
+		background: #ffffff;
 	}
 
 	.btn-print {
@@ -766,8 +774,8 @@
 	}
 
 	.btn-print:hover {
-		background: #c81038;
-		box-shadow: 0 0 18px rgba(225, 29, 72, 0.35);
+		background: #be123c;
+		box-shadow: 0 2px 10px rgba(225, 29, 72, 0.3);
 	}
 
 	/* ── Queue empty state ───────────────────────────────── */
@@ -778,7 +786,7 @@
 	.empty-printer-icon {
 		width: 68px;
 		height: 68px;
-		color: rgba(255, 255, 255, 0.09);
+		color: #dde3ea;
 		margin-bottom: 8px;
 	}
 
@@ -786,14 +794,14 @@
 		font-family: 'Barlow Condensed', sans-serif;
 		font-size: 14px;
 		font-weight: 700;
-		color: rgba(255, 255, 255, 0.32);
+		color: #94a3b8;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 	}
 
 	.empty-sub {
 		font-size: 11.5px;
-		color: rgba(255, 255, 255, 0.30);
+		color: #94a3b8;
 		text-align: center;
 		line-height: 1.65;
 	}
@@ -811,14 +819,15 @@
 		align-items: center;
 		gap: 10px;
 		padding: 10px 11px;
-		background: rgba(255, 255, 255, 0.06);
-		border: 1px solid rgba(255, 255, 255, 0.14);
+		background: #ffffff;
+		border: 1px solid #e4e9f0;
 		border-radius: 8px;
-		transition: border-color 0.12s;
+		transition: border-color 0.12s, box-shadow 0.12s;
 	}
 
 	.queue-card:hover {
-		border-color: rgba(255, 255, 255, 0.22);
+		border-color: #94a3b8;
+		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 	}
 
 	.queue-card-info {
@@ -828,7 +837,7 @@
 
 	.queue-desc {
 		font-size: 12px;
-		color: rgba(255, 255, 255, 0.78);
+		color: #334155;
 		line-height: 1.35;
 		margin: 3px 0 2px;
 		overflow: hidden;
@@ -839,7 +848,7 @@
 	.queue-code {
 		font-family: ui-monospace, monospace;
 		font-size: 9.5px;
-		color: rgba(255, 255, 255, 0.40);
+		color: #94a3b8;
 		margin-top: 1px;
 	}
 
@@ -848,7 +857,7 @@
 		display: flex;
 		align-items: center;
 		flex-shrink: 0;
-		border: 1px solid rgba(255, 255, 255, 0.11);
+		border: 1px solid #dde3ea;
 		border-radius: 6px;
 		overflow: hidden;
 	}
@@ -859,9 +868,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(255, 255, 255, 0.04);
+		background: #f8fafc;
 		border: none;
-		color: rgba(255, 255, 255, 0.65);
+		color: #475569;
 		cursor: pointer;
 		font-size: 15px;
 		line-height: 1;
@@ -869,8 +878,8 @@
 	}
 
 	.qty-btn:hover {
-		background: rgba(255, 255, 255, 0.09);
-		color: rgba(255, 255, 255, 0.85);
+		background: #f1f5f9;
+		color: #1e293b;
 	}
 
 	.qty-input {
@@ -880,11 +889,11 @@
 		font-size: 12px;
 		font-family: ui-monospace, monospace;
 		font-weight: 600;
-		color: rgba(255, 255, 255, 0.8);
-		background: rgba(255, 255, 255, 0.03);
+		color: #1e293b;
+		background: #ffffff;
 		border: none;
-		border-left: 1px solid rgba(255, 255, 255, 0.09);
-		border-right: 1px solid rgba(255, 255, 255, 0.09);
+		border-left: 1px solid #dde3ea;
+		border-right: 1px solid #dde3ea;
 		outline: none;
 		-moz-appearance: textfield;
 	}
@@ -905,14 +914,14 @@
 		border-radius: 6px;
 		background: transparent;
 		border: none;
-		color: rgba(255, 255, 255, 0.32);
+		color: #94a3b8;
 		cursor: pointer;
 		transition: background 0.1s, color 0.1s;
 	}
 
 	.remove-btn:hover {
-		background: rgba(248, 113, 113, 0.1);
-		color: #f87171;
+		background: #fef2f2;
+		color: #dc2626;
 	}
 
 </style>

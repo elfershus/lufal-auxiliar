@@ -7,6 +7,7 @@ import type {
 	GetDocumentoResult,
 	SeguimientoResult,
 	ListArticulosEtiquetaResult,
+	ListMinvResult,
 } from './types';
 
 export async function listAlmacenes(): Promise<AlmacenRecord[]> {
@@ -66,5 +67,23 @@ export async function listArticulosEtiqueta(
 	return invoke<ListArticulosEtiquetaResult>('list_articulos_etiqueta', {
 		q: q || null,
 		pageToken: pageToken || null
+	});
+}
+
+export function listMinvPorArticulo(
+	numart: string,
+	numalm?: string,
+	fechaFrom?: string,
+	fechaTo?: string,
+	pageSize?: number,
+	pageToken?: string,
+): Promise<ListMinvResult> {
+	return invoke<ListMinvResult>('list_minv_por_articulo', {
+		numart,
+		numalm: numalm ?? null,
+		fechaFrom: fechaFrom ?? null,
+		fechaTo: fechaTo ?? null,
+		pageSize: pageSize ?? 50,
+		pageToken: pageToken ?? '',
 	});
 }

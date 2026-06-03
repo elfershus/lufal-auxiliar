@@ -1009,3 +1009,75 @@ pub fn read_caja(path: &Path) -> Result<Vec<Caja>> {
     tracing::info!(count = result.len(), "dbf_reader: caja.dbf completo");
     Ok(result)
 }
+
+/// Agrega movimientos de MINV.DBF para un mes específico sin crear Vec<Minv>.
+/// Solo parsea FECHA, NUMART y CANT (3 de 22 campos).
+/// Termina temprano cuando fecha >= mes_end (los registros están ordenados por fecha).
+/// Retorna HashMap<numart, (saldo_inicial, entradas, salidas)>.
+pub fn aggregate_minv_for_month(
+    path: &Path,
+    mes_start: NaiveDate,
+    mes_end: NaiveDate,
+) -> Result<HashMap<String, (f64, f64, f64)>> {
+    tracing::info!(path = %path.display(), "dbf_reader: aggregate_minv_for_month inicio");
+
+    let data = fs::read(path)
+        .with_context(|| format!("Cannot read DBF file: {}", path.display()))?;
+
+    let header = parse_header(&data)?;
+    let map = build_field_map(&header.fields);
+    let rec_size = header.record_size as usize;
+    let data_start = header.header_size as usize;
+
+    let fecha_info = map.get("FECHA").copied()
+        .ok_or_else(|| anyhow::anyhow!("FECHA field not found in MINV.DBF"))?;
+    let numart_info = map.get("NUMART").copied()
+        .ok_or_else(|| anyhow::anyhow!("NUMART field not found in MINV.DBF"))?;
+    let cant_info = map.get("CANT").copied()
+        .ok_or_else(|| anyhow::anyhow!("CANT field not found in MINV.DBF"))?;
+
+    let mut acum: HashMap<String, (f64, f64, f64)> = HashMap::with_capacity(8_192);
+
+    for i in 0..header.num_records as usize {
+        let start = data_start + i * rec_size;
+        if start + rec_size > data.len() {
+            break;
+        }
+        let rec = &data[start..start + rec_size];
+
+        if rec[0] == b'*' {
+            continue;
+        }
+
+        let (fc_off, fc_len, _) = fecha_info;
+        let fecha = match parse_date(&rec[fc_off..fc_off + fc_len]) {
+            Some(d) => d,
+            None => continue,
+        };
+
+        if fecha >= mes_end {
+            break;
+        }
+
+        let (nm_off, nm_len, _) = numart_info;
+        let numart = parse_char(&rec[nm_off..nm_off + nm_len]);
+        if numart.is_empty() {
+            continue;
+        }
+
+        let (ca_off, ca_len, _) = cant_info;
+        let cant = parse_numeric(&rec[ca_off..ca_off + ca_len]);
+
+        let entry = acum.entry(numart).or_insert((0.0, 0.0, 0.0));
+        if fecha < mes_start {
+            entry.0 += cant;
+        } else if cant >= 0.0 {
+            entry.1 += cant;
+        } else {
+            entry.2 += cant.abs();
+        }
+    }
+
+    tracing::info!(articulos = acum.len(), "dbf_reader: aggregate_minv_for_month completo");
+    Ok(acum)
+}

@@ -16,6 +16,7 @@ use proto::{
     BuscarComprasRequest, BuscarRemisionesRequest, GetArticuloRequest,
     GetDocumentoRequest, GetEstadisticasMensualesRequest, GetProveedorRequest,
     ListAlmacenesRequest, ListArticulosRequest, ListDocumentosRequest,
+    ListMinvPorArticuloRequest,
 };
 
 // ── Interceptor de API key ─────────────────────────────────────
@@ -322,6 +323,51 @@ impl GrpcClient {
             })
             .collect();
         Ok(CxcMensualAnioResult { meses })
+    }
+
+    // ── Kardex: movimientos por artículo ──────────────────────
+
+    pub async fn list_minv_por_articulo(
+        &mut self,
+        numart: String,
+        numalm: Option<String>,
+        fecha_from: Option<String>,
+        fecha_to: Option<String>,
+        page_size: i32,
+        page_token: String,
+    ) -> Result<ListMinvResult> {
+        let req = ListMinvPorArticuloRequest {
+            numart,
+            numalm,
+            fecha_from,
+            fecha_to,
+            tipodoc: None,
+            page_size,
+            page_token,
+            sort_dir: Some("asc".to_string()),
+        };
+        let resp = self.client.list_minv_por_articulo(req).await?;
+        let inner = resp.into_inner();
+        let records = inner
+            .records
+            .into_iter()
+            .map(|m| MinvRecord {
+                tipodoc: m.tipodoc.trim().to_string(),
+                numdoc: m.numdoc.trim().to_string(),
+                numpar: m.numpar.trim().to_string(),
+                numart: m.numart.trim().to_string(),
+                fecha: m.fecha,
+                numalm: m.numalm.trim().to_string(),
+                cant: m.cant,
+                costo: m.costo,
+                costodls: m.costodls,
+                numprov: m.numprov.trim().to_string(),
+                numcli: m.numcli.trim().to_string(),
+                refer: m.refer.trim().to_string(),
+                idmotivo: m.idmotivo.trim().to_string(),
+            })
+            .collect();
+        Ok(ListMinvResult { records, next_page_token: inner.next_page_token })
     }
 }
 

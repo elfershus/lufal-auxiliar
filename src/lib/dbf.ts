@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import type { ArticuloFracciones, ArticuloSearchResult, CxcMensualAnioResult, SucursalesConfig, EstadisticasResult, EstadisticasDosAniosResult, Etiqueta, InventarioAnioResult, PairingRow, ParsePairingsResult, SeguimientoFraccionRow, ParseSeguimientosResult } from './types.js';
+import type { ArticuloFracciones, ArticuloSearchResult, CxcMensualAnioResult, SucursalesConfig, EstadisticasResult, EstadisticasDosAniosResult, Etiqueta, InventarioAnioResult, InventarioMesDetalleResult, PairingRow, ParsePairingsResult, SeguimientoFraccionRow, ParseSeguimientosResult } from './types.js';
 
 export interface FraccionesInitData {
 	fracciones: ArticuloFracciones[];
@@ -46,6 +46,14 @@ export function getEstadisticasInventarioDetalle(numalm?: string): Promise<Inven
 
 export function getEstadisticasCxcMensual(numalm?: string): Promise<CxcMensualAnioResult> {
 	return invoke('get_estadisticas_cxc_mensual', { numalm: numalm ?? null });
+}
+
+export function getInventarioPorMes(
+	numalm: string,
+	anio: number,
+	mes: number,
+): Promise<InventarioMesDetalleResult> {
+	return invoke('get_inventario_por_mes', { numalm, anio, mes });
 }
 
 export function getFraccionesInitData(numalm?: string): Promise<FraccionesInitData> {

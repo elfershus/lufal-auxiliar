@@ -5,10 +5,13 @@
 		LineController, LineElement, PointElement, Filler,
 		CategoryScale, LinearScale, Tooltip, Legend
 	} from 'chart.js';
-	import { getEstadisticasDosAnios, getEstadisticasInventarioDetalle, getEstadisticasCxcMensual } from '../lib/dbf.js';
+	import { getEstadisticasDosAnios, getEstadisticasInventarioDetalle, getEstadisticasCxcMensual, getInventarioPorMes } from '../lib/dbf.js';
+	import { listMinvPorArticulo } from '../lib/grpc.js';
 	import { appConfig } from '../lib/config.svelte.js';
+	import { auth } from '../lib/auth.svelte.js';
+	import LoginGate from '../components/LoginGate.svelte';
 	import { formatMXN } from '../lib/utils.js';
-	import type { EstadisticasResult, PeriodoStat, InventarioAnioResult, CxcMensualAnioResult, InventarioMesStat, CxcMensualMesStat } from '../lib/types.js';
+	import type { EstadisticasResult, PeriodoStat, InventarioAnioResult, CxcMensualAnioResult, InventarioMesStat, CxcMensualMesStat, MinvRecord, InventarioMesDetalleResult } from '../lib/types.js';
 
 	Chart.register(BarController, BarElement, LineController, LineElement, PointElement, Filler, CategoryScale, LinearScale, Tooltip, Legend);
 
@@ -51,8 +54,49 @@
 	let chartCxc:        Chart | null = null;
 
 	// Tab y navegación de mes
-	let tabActiva       = $state<'detalles' | 'vision'>('detalles');
+	let tabActiva       = $state<'detalles' | 'vision' | 'kardex'>('detalles');
 	let mesSeleccionado = $state(mesActual);
+
+	// Kardex
+	let canvasEntradaSalida = $state<HTMLCanvasElement | null>(null);
+	let chartEntradaSalida: Chart | null = null;
+	let kardexArticulo  = $state('');
+	let kardexFechaFrom = $state(`${anioActual}-01-01`);
+	let kardexFechaTo   = $state(`${anioActual}-12-31`);
+	let kardexCargando  = $state(false);
+	let kardexError     = $state('');
+	let kardexMovs      = $state<MinvRecord[]>([]);
+	let kardexNextPage  = $state('');
+
+	// Catálogo por Mes
+	let kardexSubTab   = $state<'por-articulo' | 'por-mes'>('por-articulo');
+	let catMesAnio     = $state(anioActual);
+	let catMesMes      = $state(mesActual + 1);
+	let catMesCargando = $state(false);
+	let catMesError    = $state('');
+	let catMesDatos    = $state<InventarioMesDetalleResult | null>(null);
+	let catMesFiltro   = $state('');
+
+	// KPIs kardex — Por Artículo (conservados, sin binding en template)
+	const kardexTotalEntradas = $derived(kardexMovs.reduce((s, m) => s + (m.cant > 0 ? m.cant : 0), 0));
+	const kardexTotalSalidas  = $derived(kardexMovs.reduce((s, m) => s + (m.cant < 0 ? Math.abs(m.cant) : 0), 0));
+	const kardexTotalCosto    = $derived(kardexMovs.reduce((s, m) => s + m.costo, 0));
+	const kardexNetoCant      = $derived(kardexTotalEntradas - kardexTotalSalidas);
+
+	// Artículos filtrados por clave o descripción
+	const articulosFiltrados = $derived(
+		catMesDatos?.articulos.filter(a => {
+			const q = catMesFiltro.toLowerCase().trim();
+			if (!q) return true;
+			return a.numart.toLowerCase().includes(q) || (a.desc ?? '').toLowerCase().includes(q);
+		}) ?? []
+	);
+
+	// Totales footer — reflejan el filtro activo
+	const catMesTotalSaldoInicial = $derived(articulosFiltrados.reduce((s, a) => s + a.saldo_inicial, 0));
+	const catMesTotalEntradas     = $derived(articulosFiltrados.reduce((s, a) => s + a.entradas, 0));
+	const catMesTotalSalidas      = $derived(articulosFiltrados.reduce((s, a) => s + a.salidas, 0));
+	const catMesTotalSaldoFinal   = $derived(articulosFiltrados.reduce((s, a) => s + a.saldo_final, 0));
 
 	function getPeriodo(datos: EstadisticasResult | null, anio: number, mesIdx: number): PeriodoStat {
 		const key = `${anio}-${String(mesIdx + 1).padStart(2, '0')}`;
@@ -104,7 +148,7 @@
 		cargando = false;
 	}
 
-	$effect(() => { cargar(); });
+	$effect(() => { if (auth.unlocked) cargar(); });
 
 	// Derived para tab Detalles (reactive a mesSeleccionado)
 	const mesData     = $derived(getPeriodo(datosActual,       anioActual,     mesSeleccionado));
@@ -405,6 +449,138 @@
 		return () => { c.destroy(); };
 	});
 
+	// Kardex — gráfica entradas vs. salidas por mes
+	$effect(() => {
+		if (!canvasEntradaSalida) return;
+		const entradas = MESES_CORTOS.map((_, i) => {
+			const key = `${anioActual}-${String(i + 1).padStart(2, '0')}`;
+			return datosInventario?.meses.find(m => m.mes === key)?.entradas ?? 0;
+		});
+		const salidas = MESES_CORTOS.map((_, i) => {
+			const key = `${anioActual}-${String(i + 1).padStart(2, '0')}`;
+			return datosInventario?.meses.find(m => m.mes === key)?.salidas ?? 0;
+		});
+		const c = new Chart(canvasEntradaSalida, {
+			type: 'bar',
+			data: {
+				labels: MESES_CORTOS,
+				datasets: [
+					{
+						label: 'Entradas',
+						data: entradas,
+						backgroundColor: 'rgba(20,184,166,0.75)',
+						borderColor: 'rgba(20,184,166,1)',
+						borderWidth: 1, borderRadius: 3,
+					},
+					{
+						label: 'Salidas',
+						data: salidas,
+						backgroundColor: 'rgba(232,130,10,0.75)',
+						borderColor: 'rgba(232,130,10,1)',
+						borderWidth: 1, borderRadius: 3,
+					},
+				],
+			},
+			options: {
+				responsive: true, maintainAspectRatio: false, animation: false,
+				plugins: {
+					legend: {
+						display: true, position: 'top', align: 'end',
+						labels: { font: { family: 'JetBrains Mono, monospace', size: 10 }, color: '#94a3b8', boxWidth: 10, boxHeight: 10, padding: 8, usePointStyle: true, pointStyle: 'rect' },
+					},
+					tooltip: {
+						callbacks: { label(ctx: any) { return ` ${ctx.dataset.label}: ${formatMXN(ctx.parsed.y ?? 0)}`; } },
+					},
+				},
+				scales: {
+					x: { grid: { display: false }, ticks: { font: { family: 'JetBrains Mono, monospace', size: 9 }, color: '#94a3b8' } },
+					y: {
+						beginAtZero: true,
+						grid: { color: 'rgba(0,0,0,0.05)' },
+						ticks: {
+							font: { family: 'JetBrains Mono, monospace', size: 9 }, color: '#94a3b8', maxTicksLimit: 4,
+							callback(val: any) {
+								const n = Number(val);
+								if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+								if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+								return `$${n}`;
+							},
+						},
+					},
+				},
+			},
+		} as any);
+		chartEntradaSalida = c;
+		return () => { c.destroy(); };
+	});
+
+	// Auto-carga al cambiar mes, año o almacén mientras el tab Movimientos está activo
+	$effect(() => {
+		if (tabActiva !== 'kardex') return;
+		const anio = catMesAnio;
+		const mes  = catMesMes;
+		const alm  = appConfig.numalm;
+		if (!alm) return;
+		void anio; void mes;
+		cargarCatMes();
+	});
+
+	async function buscarKardex(resetear = true) {
+		if (!kardexArticulo.trim()) return;
+		kardexCargando = true;
+		kardexError = '';
+		if (resetear) { kardexMovs = []; kardexNextPage = ''; }
+		try {
+			const numalm = appConfig.numalm || undefined;
+			const res = await listMinvPorArticulo(
+				kardexArticulo.trim(),
+				numalm,
+				kardexFechaFrom || undefined,
+				kardexFechaTo || undefined,
+				50,
+				resetear ? '' : kardexNextPage,
+			);
+			kardexMovs = resetear ? res.records : [...kardexMovs, ...res.records];
+			kardexNextPage = res.next_page_token;
+		} catch (e) {
+			kardexError = e instanceof Error ? e.message : String(e);
+		} finally {
+			kardexCargando = false;
+		}
+	}
+
+	async function cargarCatMes() {
+		if (!appConfig.numalm) return;
+		catMesCargando = true;
+		catMesError = '';
+		catMesDatos = null;
+		try {
+			catMesDatos = await getInventarioPorMes(appConfig.numalm, catMesAnio, catMesMes);
+		} catch (e) {
+			catMesError = e instanceof Error ? e.message : String(e);
+		} finally {
+			catMesCargando = false;
+		}
+	}
+
+	function fmtCant(val: number): string {
+		if (Math.abs(val) < 1e-6) return '—';
+		return new Intl.NumberFormat('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 3 }).format(val);
+	}
+
+	interface TipodocBadge { label: string; bg: string; text: string; }
+	function tipodocBadge(tipodoc: string): TipodocBadge {
+		switch (tipodoc.toUpperCase()) {
+			case 'C':  return { label: 'Compra',   bg: 'bg-teal-50',   text: 'text-teal-700' };
+			case 'R':  return { label: 'Remisión', bg: 'bg-orange-50',  text: 'text-orange-600' };
+			case 'F':  return { label: 'Factura',  bg: 'bg-green-50',  text: 'text-green' };
+			case 'N':  return { label: 'Nota',     bg: 'bg-slate-100', text: 'text-slate-600' };
+			case 'DN': return { label: 'Dev.Nota', bg: 'bg-violet-50', text: 'text-violet-600' };
+			case 'DR': return { label: 'Dev.Rem.', bg: 'bg-orange-50', text: 'text-orange-600' };
+			default:   return { label: tipodoc,    bg: 'bg-slate-100', text: 'text-slate-500' };
+		}
+	}
+
 	onDestroy(() => {
 		chartMes?.destroy();
 		chartVentasContado?.destroy();
@@ -413,6 +589,7 @@
 		chartBalance?.destroy();
 		chartInventario?.destroy();
 		chartCxc?.destroy();
+		chartEntradaSalida?.destroy();
 	});
 
 	function fmtDelta(d: number | null): string {
@@ -448,7 +625,7 @@
 			</div>
 			<button
 				onclick={cargar}
-				disabled={cargando}
+				disabled={!auth.unlocked || cargando}
 				class="ml-auto w-8 h-8 flex items-center justify-center rounded bg-white/10 hover:bg-white/20 active:bg-white/30 transition-colors disabled:opacity-40"
 				title="Actualizar"
 			>
@@ -474,11 +651,18 @@
 			>
 				Vista por Año
 			</button>
+			<button
+				onclick={() => { tabActiva = 'kardex'; }}
+				class="px-4 pb-3 pt-1 font-barlow text-[13px] font-medium border-b-2 transition-colors duration-150 {tabActiva === 'kardex' ? 'text-white border-amber' : 'text-white/45 border-transparent hover:text-white/70'}"
+			>
+				Movimientos
+			</button>
 		</div>
 	</div>
 	<!-- Separador gradiente bajo el header -->
 	<div class="h-px" style="background: linear-gradient(90deg, rgba(232,130,10,0.35) 0%, rgba(226,232,240,0.8) 40%, transparent 100%)"></div>
 
+	<LoginGate subtitle="Ingresa la contraseña para ver las estadísticas">
 	<div class="px-4 py-4 md:px-6 space-y-3">
 
 		{#if sinArchivo}
@@ -771,7 +955,7 @@
 
 					</div>
 
-				{:else}
+				{:else if tabActiva === 'vision'}
 
 					<!-- ── VISIÓN GENERAL — grid 2 columnas ── -->
 					<div class="grid grid-cols-2 gap-3">
@@ -887,6 +1071,128 @@
 					</div>
 					<!-- FIN VISIÓN GENERAL GRID -->
 
+				{:else if tabActiva === 'kardex'}
+
+					<!-- Navegador año + mes (barra bleed-out, igual a Vista por Mes) -->
+					<div class="-mx-4 md:-mx-6 px-4 md:px-6 py-2.5 border-b border-slate-200/70 bg-surface/60 mb-4 overflow-x-auto">
+						<div class="flex gap-2 items-center min-w-max">
+
+							<!-- Navegador de año -->
+							<div class="flex items-center gap-1 pr-2 border-r border-slate-200">
+								<button
+									onclick={() => { catMesAnio -= 1; }}
+									class="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 text-[13px] leading-none transition-colors"
+								>&#8249;</button>
+								<span class="font-mono text-[12px] font-bold text-navy tabular-nums w-10 text-center">{catMesAnio}</span>
+								<button
+									onclick={() => { if (catMesAnio < anioActual) catMesAnio += 1; }}
+									disabled={catMesAnio >= anioActual}
+									class="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 text-[13px] leading-none transition-colors disabled:opacity-30 disabled:pointer-events-none"
+								>&#8250;</button>
+							</div>
+
+							<!-- Pills de mes -->
+							{#each MESES_CORTOS as mes, i}
+								{@const mesNum = i + 1}
+								{@const esFuturo = catMesAnio === anioActual && mesNum > mesActual + 1}
+								{@const esSeleccionado = mesNum === catMesMes}
+								<button
+									onclick={() => { catMesMes = mesNum; }}
+									disabled={esFuturo}
+									class="px-3 py-1 rounded-full text-[11px] font-mono font-medium transition-colors
+										{esSeleccionado ? 'bg-navy text-white' : esFuturo ? 'text-slate-300 pointer-events-none' : 'text-slate-500 hover:text-navy hover:bg-navy/[0.08]'}"
+								>
+									{mes}
+								</button>
+							{/each}
+
+							<!-- Indicador de estado -->
+							{#if catMesCargando}
+								<span class="text-[10px] font-mono text-slate-400 pl-2">Cargando…</span>
+							{:else if catMesDatos}
+								<span class="text-[10px] font-mono text-slate-400 pl-2">
+									{catMesDatos.articulos.length} artículo{catMesDatos.articulos.length !== 1 ? 's' : ''}
+								</span>
+							{:else if !appConfig.numalm}
+								<span class="text-[10px] font-mono text-slate-400 pl-2">Configura un almacén primero</span>
+							{/if}
+
+						</div>
+					</div>
+
+					<!-- Filtro de tabla -->
+					{#if catMesDatos && catMesDatos.articulos.length > 0}
+						<div class="relative mb-3 animate-fadeSlide">
+							<input
+								type="text"
+								bind:value={catMesFiltro}
+								placeholder="Filtrar por clave o descripción…"
+								class="w-full h-8 pl-8 pr-3 rounded border border-slate-200 bg-white text-[12px] font-mono text-navy placeholder-slate-300 focus:outline-none focus:ring-1 focus:ring-teal-400"
+							/>
+							<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+								<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+							</svg>
+						</div>
+					{/if}
+
+					<!-- Error -->
+					{#if catMesError}
+						<div class="bg-red-50 border border-red-200 rounded px-3 py-2 text-[12px] text-red-600 font-mono animate-fadeSlide mb-3">
+							{catMesError}
+						</div>
+					{/if}
+
+					<!-- Tabla de artículos -->
+					{#if articulosFiltrados.length > 0}
+						<div class="bg-surface rounded border border-slate-200 overflow-hidden animate-fadeSlide">
+							<div class="overflow-x-auto">
+								<table class="w-full text-[11px] font-mono">
+									<thead>
+										<tr class="border-b border-slate-200 bg-bg">
+											<th class="px-3 py-2 text-left font-semibold text-slate-500 whitespace-nowrap">Clave</th>
+											<th class="px-3 py-2 text-left font-semibold text-slate-500">Descripción</th>
+											<th class="px-3 py-2 text-right font-semibold text-slate-500 whitespace-nowrap">Inv. Inicial</th>
+											<th class="px-3 py-2 text-right font-semibold text-teal-600 whitespace-nowrap">Entradas</th>
+											<th class="px-3 py-2 text-right font-semibold text-orange-500 whitespace-nowrap">Salidas</th>
+											<th class="px-3 py-2 text-right font-semibold text-navy whitespace-nowrap">Inv. Final</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each articulosFiltrados as art}
+											<tr class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+												<td class="px-3 py-1.5 text-slate-600 font-semibold whitespace-nowrap">{art.numart}</td>
+												<td class="px-3 py-1.5 text-slate-500 max-w-[220px] truncate">{art.desc || '—'}</td>
+												<td class="px-3 py-1.5 text-right text-slate-600 whitespace-nowrap">{fmtCant(art.saldo_inicial)}</td>
+												<td class="px-3 py-1.5 text-right whitespace-nowrap {art.entradas > 0 ? 'text-teal-600' : 'text-slate-400'}">{fmtCant(art.entradas)}</td>
+												<td class="px-3 py-1.5 text-right whitespace-nowrap {art.salidas > 0 ? 'text-orange-500' : 'text-slate-400'}">{fmtCant(art.salidas)}</td>
+												<td class="px-3 py-1.5 text-right font-semibold whitespace-nowrap {art.saldo_final >= 0 ? 'text-navy' : 'text-red-500'}">{fmtCant(art.saldo_final)}</td>
+											</tr>
+										{/each}
+									</tbody>
+									<tfoot>
+										<tr class="border-t border-slate-200 bg-bg">
+											<td class="px-3 py-2 text-[10px] font-mono font-bold tracking-[0.1em] uppercase text-slate-500" colspan="2">
+												{catMesFiltro.trim() ? `${articulosFiltrados.length} resultado${articulosFiltrados.length !== 1 ? 's' : ''}` : `Totales · ${articulosFiltrados.length} artículos`}
+											</td>
+											<td class="px-3 py-2 text-right font-bold text-slate-600 whitespace-nowrap">{fmtCant(catMesTotalSaldoInicial)}</td>
+											<td class="px-3 py-2 text-right font-bold text-teal-600 whitespace-nowrap">{fmtCant(catMesTotalEntradas)}</td>
+											<td class="px-3 py-2 text-right font-bold text-orange-500 whitespace-nowrap">{fmtCant(catMesTotalSalidas)}</td>
+											<td class="px-3 py-2 text-right font-bold whitespace-nowrap {catMesTotalSaldoFinal >= 0 ? 'text-navy' : 'text-red-500'}">{fmtCant(catMesTotalSaldoFinal)}</td>
+										</tr>
+									</tfoot>
+								</table>
+							</div>
+						</div>
+					{:else if catMesDatos}
+						<div class="text-center text-[12px] font-mono text-slate-400 py-8 animate-fadeSlide">
+							{#if catMesFiltro.trim()}
+								Sin artículos que coincidan con <span class="font-semibold text-slate-500">"{catMesFiltro}"</span>
+							{:else}
+								Sin movimientos en {MESES_COMPLETOS[catMesMes - 1]} {catMesAnio}
+							{/if}
+						</div>
+					{/if}
+
 				{/if}
 
 			</div>
@@ -895,4 +1201,5 @@
 		{/if}
 
 	</div>
+	</LoginGate>
 </div>

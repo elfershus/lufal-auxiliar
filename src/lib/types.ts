@@ -284,3 +284,39 @@ export interface CxcMensualMesStat {
 export interface CxcMensualAnioResult {
 	meses: CxcMensualMesStat[];
 }
+
+export interface MinvRecord {
+	tipodoc: string;
+	numdoc: string;
+	numpar: string;
+	numart: string;
+	fecha: string;
+	numalm: string;
+	cant: number;
+	costo: number;
+	costodls: number;
+	numprov: string;
+	numcli: string;
+	refer: string;
+	idmotivo: string;
+}
+
+export interface ListMinvResult {
+	records: MinvRecord[];
+	next_page_token: string;
+}
+
+export interface ArticuloMovMesStat {
+	numart: string;
+	desc: string;
+	saldo_inicial: number;
+	entradas: number;
+	salidas: number;
+	saldo_final: number;
+}
+
+export interface InventarioMesDetalleResult {
+	anio: number;
+	mes: number;
+	articulos: ArticuloMovMesStat[];
+}

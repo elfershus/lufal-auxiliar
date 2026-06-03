@@ -45,7 +45,7 @@
 					// Sin red o config incompleta: continuar sin inicializar almacén
 				}
 			}
-			activeView = 'estadisticas';
+			activeView = 'ordenes';
 		})();
 	});
 

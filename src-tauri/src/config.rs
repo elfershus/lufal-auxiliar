@@ -40,6 +40,10 @@ impl AppConfig {
         self.dbf_path_for(numalm).map(|p| format!("{}\\Arts.DBF", p))
     }
 
+    pub fn minv_path_for(&self, numalm: &str) -> Option<String> {
+        self.dbf_path_for(numalm).map(|p| format!("{}\\Minv.DBF", p))
+    }
+
     pub fn unidades_path_for(&self, numalm: &str) -> Option<String> {
         self.dbf_path_for(numalm).map(|p| format!("{}\\Unidades.DBF", p))
     }

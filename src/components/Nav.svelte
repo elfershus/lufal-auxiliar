@@ -80,36 +80,6 @@
         <button
             class="w-full flex items-center gap-3 px-4 py-[10px] font-barlow text-[14px] font-medium
 				no-underline transition-colors duration-150 border-l-2 text-left
-				{isActive('estadisticas')
-                ? 'bg-white/[0.12] text-white border-l-[#e11d48]'
-                : 'text-white/55 border-l-transparent hover:text-white hover:bg-white/[0.07]'}"
-            onclick={() => onNavigate("estadisticas")}
-        >
-            <span
-                class="w-[18px] h-[18px] shrink-0 flex"
-                style="color: {isActive('estadisticas')
-                    ? '#e11d48'
-                    : 'rgba(255,255,255,0.35)'}"
-            >
-                <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.75"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                >
-                    <line x1="18" y1="20" x2="18" y2="10" />
-                    <line x1="12" y1="20" x2="12" y2="4" />
-                    <line x1="6" y1="20" x2="6" y2="14" />
-                </svg>
-            </span>
-            <span>Estadísticas</span>
-        </button>
-
-        <button
-            class="w-full flex items-center gap-3 px-4 py-[10px] font-barlow text-[14px] font-medium
-				no-underline transition-colors duration-150 border-l-2 text-left
 				{isActive('ordenes')
                 ? 'bg-white/[0.12] text-white border-l-[#e11d48]'
                 : 'text-white/55 border-l-transparent hover:text-white hover:bg-white/[0.07]'}"
@@ -197,6 +167,36 @@
                 </svg>
             </span>
             <span>Etiquetas</span>
+        </button>
+
+        <button
+            class="w-full flex items-center gap-3 px-4 py-[10px] font-barlow text-[14px] font-medium
+				no-underline transition-colors duration-150 border-l-2 text-left
+				{isActive('estadisticas')
+                ? 'bg-white/[0.12] text-white border-l-[#e11d48]'
+                : 'text-white/55 border-l-transparent hover:text-white hover:bg-white/[0.07]'}"
+            onclick={() => onNavigate("estadisticas")}
+        >
+            <span
+                class="w-[18px] h-[18px] shrink-0 flex"
+                style="color: {isActive('estadisticas')
+                    ? '#e11d48'
+                    : 'rgba(255,255,255,0.35)'}"
+            >
+                <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.75"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                >
+                    <line x1="18" y1="20" x2="18" y2="10" />
+                    <line x1="12" y1="20" x2="12" y2="4" />
+                    <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+            </span>
+            <span>Estadísticas</span>
         </button>
     </nav>
 

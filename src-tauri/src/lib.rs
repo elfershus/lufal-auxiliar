@@ -788,6 +788,89 @@ async fn get_estadisticas_cxc_mensual(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn list_minv_por_articulo(
+    grpc: State<'_, GrpcState>,
+    numart: String,
+    numalm: Option<String>,
+    fecha_from: Option<String>,
+    fecha_to: Option<String>,
+    page_size: Option<i32>,
+    page_token: Option<String>,
+) -> Result<ListMinvResult, String> {
+    grpc.lock()
+        .await
+        .as_mut()
+        .ok_or_else(|| "Sin configuración".to_string())?
+        .list_minv_por_articulo(
+            numart,
+            numalm,
+            fecha_from,
+            fecha_to,
+            page_size.unwrap_or(50),
+            page_token.unwrap_or_default(),
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_inventario_por_mes(
+    numalm: String,
+    anio: i32,
+    mes: u32,
+) -> Result<InventarioMesDetalleResult, String> {
+    use chrono::NaiveDate;
+    use std::collections::HashMap;
+    use std::path::Path;
+
+    let cfg = AppConfig::load().map_err(|e| e.to_string())?;
+    let arts_path = cfg
+        .arts_path_for(&numalm)
+        .ok_or_else(|| "Carpeta DBF no configurada para este almacén".to_string())?;
+    let minv_path = cfg
+        .minv_path_for(&numalm)
+        .ok_or_else(|| "Carpeta DBF no configurada para este almacén".to_string())?;
+
+    let articulos = dbf_reader::read_articulos(Path::new(&arts_path))
+        .map_err(|e| e.to_string())?;
+    let arts_map: HashMap<String, String> = articulos
+        .iter()
+        .filter(|a| !a.deleted_in_dbf)
+        .map(|a| (a.numart.trim().to_string(), a.desc.clone()))
+        .collect();
+
+    let mes_start = NaiveDate::from_ymd_opt(anio, mes, 1)
+        .ok_or_else(|| format!("Fecha inválida: {}-{}", anio, mes))?;
+    let (next_y, next_m) = if mes == 12 { (anio + 1, 1) } else { (anio, mes + 1) };
+    let mes_end = NaiveDate::from_ymd_opt(next_y, next_m, 1).unwrap();
+
+    let acum = dbf_reader::aggregate_minv_for_month(
+        Path::new(&minv_path),
+        mes_start,
+        mes_end,
+    ).map_err(|e| e.to_string())?;
+
+    let mut result: Vec<ArticuloMovMesStat> = acum
+        .into_iter()
+        .filter(|(_, (si, e, s))| si.abs() > 1e-6 || *e > 1e-6 || *s > 1e-6)
+        .map(|(numart, (si, e, s))| {
+            let desc = arts_map.get(&numart).cloned().unwrap_or_default();
+            ArticuloMovMesStat {
+                numart,
+                desc,
+                saldo_inicial: si,
+                entradas: e,
+                salidas: s,
+                saldo_final: si + e - s,
+            }
+        })
+        .collect();
+
+    result.sort_by(|a, b| a.numart.cmp(&b.numart));
+    Ok(InventarioMesDetalleResult { anio, mes, articulos: result })
+}
+
 // ── Entry point ────────────────────────────────────────────────
 
 #[tauri::command]
@@ -863,6 +946,8 @@ pub fn run() {
             get_estadisticas_inventario_detalle,
             get_estadisticas_cxc_mensual,
             save_sucursales_map,
+            list_minv_por_articulo,
+            get_inventario_por_mes,
         ])
         .run(tauri::generate_context!())
         .expect("Error al iniciar la aplicación Tauri");

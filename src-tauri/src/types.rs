@@ -248,3 +248,43 @@ pub struct CxcMensualMesStat {
 pub struct CxcMensualAnioResult {
     pub meses: Vec<CxcMensualMesStat>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MinvRecord {
+    pub tipodoc: String,
+    pub numdoc: String,
+    pub numpar: String,
+    pub numart: String,
+    pub fecha: String,
+    pub numalm: String,
+    pub cant: f64,
+    pub costo: f64,
+    pub costodls: f64,
+    pub numprov: String,
+    pub numcli: String,
+    pub refer: String,
+    pub idmotivo: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListMinvResult {
+    pub records: Vec<MinvRecord>,
+    pub next_page_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArticuloMovMesStat {
+    pub numart: String,
+    pub desc: String,
+    pub saldo_inicial: f64,
+    pub entradas: f64,
+    pub salidas: f64,
+    pub saldo_final: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InventarioMesDetalleResult {
+    pub anio: i32,
+    pub mes: u32,
+    pub articulos: Vec<ArticuloMovMesStat>,
+}

@@ -2271,11 +2271,12 @@
         aria-modal="true"
         tabindex="-1"
     >
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="bg-white rounded-xl shadow-2xl w-full max-w-sm max-h-[80vh] flex flex-col overflow-hidden"
             onclick={(ev) => ev.stopPropagation()}
             onkeydown={(ev) => ev.stopPropagation()}
-            role="document"
         >
             <!-- Header -->
             <div
@@ -2465,11 +2466,11 @@
         aria-modal="true"
         tabindex="-1"
     >
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
             onclick={(e) => e.stopPropagation()}
             onkeydown={(e) => e.stopPropagation()}
-            role="document"
         >
             <!-- Header -->
             <div
@@ -2782,11 +2783,11 @@
         aria-modal="true"
         tabindex="-1"
     >
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
             onclick={(e) => e.stopPropagation()}
             onkeydown={(e) => e.stopPropagation()}
-            role="document"
         >
             <!-- Header del modal -->
             <div class="px-4 pt-4 pb-3 border-b border-slate-100">
@@ -3078,11 +3079,11 @@
         aria-modal="true"
         tabindex="-1"
     >
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden"
             onclick={(e) => e.stopPropagation()}
             onkeydown={(e) => e.stopPropagation()}
-            role="document"
         >
             <div class="px-4 pt-4 pb-3 border-b border-slate-100">
                 <div class="flex items-center justify-between mb-2">
@@ -3299,11 +3300,11 @@
         aria-modal="true"
         tabindex="-1"
     >
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="bg-white rounded-xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden"
             onclick={(e) => e.stopPropagation()}
             onkeydown={(e) => e.stopPropagation()}
-            role="document"
         >
             <div
                 class="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center justify-between flex-shrink-0"
