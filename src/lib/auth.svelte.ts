@@ -3,8 +3,13 @@ class AuthState {
 
 	unlock(password: string): boolean {
 		const now = new Date();
-		const day = now.getDate();
-		const month = now.getMonth() + 1;
+		const parts = new Intl.DateTimeFormat('es-MX', {
+			timeZone: 'America/Mexico_City',
+			day: 'numeric',
+			month: 'numeric'
+		}).formatToParts(now);
+		const day   = parseInt(parts.find(p => p.type === 'day')!.value);
+		const month = parseInt(parts.find(p => p.type === 'month')!.value);
 		const expected = `${day * 2}${month * 3}${day * 2}`;
 		if (password === expected) {
 			this.unlocked = true;
