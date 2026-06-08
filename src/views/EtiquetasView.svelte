@@ -21,15 +21,6 @@
 	let cola = $state<ItemCola[]>([]);
 	let totalEtiquetas = $derived(cola.reduce((s, i) => s + i.cantidad, 0));
 
-	// ── Modo de impresión ──────────────────────────────────────
-	type ModoImpresion = '29x90' | '62mm' | 'carta';
-	let modoImpresion = $state<ModoImpresion>(
-		(localStorage.getItem('etiquetas_modo') as ModoImpresion) ?? '62mm'
-	);
-	$effect(() => {
-		localStorage.setItem('etiquetas_modo', modoImpresion);
-	});
-
 	// ── Búsqueda con debounce ──────────────────────────────────
 	onMount(() => {
 		mounted = true;
@@ -103,33 +94,9 @@
 	}
 
 	function imprimir() {
-		const es29    = modoImpresion === '29x90';
-		const esCarta = modoImpresion === 'carta';
+		const barcodeOpts = { format: 'CODE128', width: 2, height: 50, displayValue: false, margin: 0 };
 
-		const barcodeOpts = es29
-			? { format: 'CODE128', width: 1,   height: 28, displayValue: false, margin: 0 }
-			: esCarta
-			? { format: 'CODE128', width: 1.5, height: 40, displayValue: false, margin: 0 }
-			: { format: 'CODE128', width: 2,   height: 50, displayValue: false, margin: 0 };
-
-		const css = es29
-			? `* { box-sizing: border-box; margin: 0; padding: 0; }
-			@page { size: 29mm 90.3mm; margin: 1.5mm; }
-			.label-page { page-break-after: always; break-after: page; width: 26mm; padding: 1mm; font-family: monospace, sans-serif; }
-			.label-barcode { width: 100%; margin-bottom: 1.5mm; }
-			.label-barcode svg { width: 100%; height: auto; }
-			.label-numart { font-size: 9pt; font-weight: bold; letter-spacing: 0.03em; margin-bottom: 1mm; text-align: center; }
-			.label-desc { font-size: 6pt; line-height: 1.35; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: normal; word-break: break-word; }`
-			: esCarta
-			? `* { box-sizing: border-box; margin: 0; padding: 0; }
-			@page { size: letter; margin: 10mm; }
-			body { display: flex; flex-wrap: wrap; gap: 3mm; align-content: flex-start; }
-			.label-page { width: 62mm; height: 34mm; overflow: hidden; padding: 2mm; border: 0.4pt dashed #bbb; break-inside: avoid; page-break-inside: avoid; }
-			.label-barcode { width: 100%; margin-bottom: 1mm; }
-			.label-barcode svg { width: 100%; height: auto; }
-			.label-numart { font-size: 10pt; font-weight: bold; letter-spacing: 0.04em; margin-bottom: 0.5mm; text-align: center; font-family: monospace, sans-serif; }
-			.label-desc { font-size: 7pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`
-			: `* { box-sizing: border-box; margin: 0; padding: 0; }
+		const css = `* { box-sizing: border-box; margin: 0; padding: 0; }
 			@page { size: 62mm auto; margin: 3mm; }
 			.label-page { page-break-after: always; break-after: page; width: 56mm; padding: 2mm; font-family: monospace, sans-serif; }
 			.label-barcode { width: 100%; margin-bottom: 2mm; }
@@ -386,7 +353,7 @@
 
 			<!-- Header panel -->
 			<div class="px-4 py-3 border-b border-slate-200 flex-shrink-0 bg-surface">
-				<div class="flex items-center justify-between gap-3">
+				<div class="flex items-center gap-3">
 					<div class="flex items-center gap-2.5">
 						<div class="w-7 h-7 rounded-lg flex items-center justify-center bg-navy/[0.08] border border-navy/20 text-navy flex-shrink-0">
 							<svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -411,68 +378,7 @@
 						</div>
 					</div>
 
-					<!-- Selector de formato -->
-					<div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 flex-shrink-0" role="group" aria-label="Modo de impresión">
-						<button
-							class="flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-barlow transition-all
-								   {modoImpresion === '29x90' ? 'bg-white text-slate-700 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'}"
-							onclick={() => (modoImpresion = '29x90')}
-							title="Etiqueta vertical 29mm × 90.3mm"
-						>
-							<svg viewBox="0 0 9 22" width="7" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-								<rect x="0.75" y="0.75" width="7.5" height="20.5" rx="1.25" stroke-width="1.4" fill="currentColor" fill-opacity="0.1"/>
-								<line x1="2.5" y1="4"    x2="6.5" y2="4"    stroke-width="0.9"/>
-								<line x1="2.5" y1="5.5"  x2="6.5" y2="5.5"  stroke-width="0.9"/>
-								<line x1="2.5" y1="7"    x2="6.5" y2="7"    stroke-width="0.9"/>
-								<line x1="2.5" y1="11"   x2="6.5" y2="11"   stroke-width="1.2"/>
-								<line x1="3"   y1="14"   x2="6"   y2="14"   stroke-width="0.8"/>
-								<line x1="2.5" y1="16.5" x2="6.5" y2="16.5" stroke-width="0.8"/>
-							</svg>
-							<span>29×90</span>
-						</button>
-						<button
-							class="flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-barlow transition-all
-								   {modoImpresion === '62mm' ? 'bg-white text-slate-700 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'}"
-							onclick={() => (modoImpresion = '62mm')}
-							title="Etiqueta continua 62mm de ancho"
-						>
-							<svg viewBox="0 0 28 13" width="15" height="7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-								<rect x="0.75" y="0.75" width="26.5" height="11.5" rx="1.25" stroke-width="1.4" fill="currentColor" fill-opacity="0.1"/>
-								<line x1="3"   y1="2.5" x2="3"   y2="10.5" stroke-width="0.9"/>
-								<line x1="4.5" y1="2.5" x2="4.5" y2="10.5" stroke-width="0.9"/>
-								<line x1="6"   y1="2.5" x2="6"   y2="10.5" stroke-width="0.9"/>
-								<line x1="7.5" y1="2.5" x2="7.5" y2="10.5" stroke-width="0.9"/>
-								<line x1="10"  y1="4"   x2="26"  y2="4"    stroke-width="1.2"/>
-								<line x1="10"  y1="6.5" x2="23"  y2="6.5"  stroke-width="0.8"/>
-								<line x1="10"  y1="9"   x2="25"  y2="9"    stroke-width="0.8"/>
-							</svg>
-							<span>62mm</span>
-						</button>
-						<button
-							class="flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-barlow transition-all
-								   {modoImpresion === 'carta' ? 'bg-white text-slate-700 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'}"
-							onclick={() => (modoImpresion = 'carta')}
-							title="Hoja carta — múltiples etiquetas 62mm"
-						>
-							<svg viewBox="0 0 18 22" width="11" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-								<rect x="0.75"  y="0.75"  width="16.5" height="20.5" rx="1.25" stroke-width="1.4" fill="currentColor" fill-opacity="0.1"/>
-								<rect x="2"  y="3"    width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="7"  y="3"    width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="12" y="3"    width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="2"  y="7.5"  width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="7"  y="7.5"  width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="12" y="7.5"  width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="2"  y="12"   width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="7"  y="12"   width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="12" y="12"   width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="2"  y="16.5" width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="7"  y="16.5" width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-								<rect x="12" y="16.5" width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
-							</svg>
-							<span>Carta</span>
-						</button>
 					</div>
-				</div>
 			</div>
 
 			<!-- Cola -->
