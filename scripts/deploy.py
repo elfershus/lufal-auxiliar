@@ -22,6 +22,7 @@ Requisitos previos (una sola vez):
 SSH: usa el alias "cloud-api" definido en ~/.ssh/config (host, user y .pem ya están ahí).
 """
 
+import getpass
 import json
 import os
 import subprocess
@@ -31,6 +32,21 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 sys.stderr.reconfigure(encoding="utf-8")
+
+
+def load_dotenv() -> None:
+    env_path = Path(__file__).parent.parent / ".env"
+    if not env_path.exists():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+load_dotenv()
 
 # ── Configuración ──────────────────────────────────────────────────────────
 SSH_ALIAS   = "cloud-api"                     # alias de ~/.ssh/config
@@ -47,28 +63,27 @@ def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
 
 
 def get_version() -> str:
-    patch = subprocess.check_output(
-        ["git", "rev-list", "--count", "HEAD"],
-        text=True,
-        cwd=ROOT,
-    ).strip()
-    return f"0.1.{patch}"
-
-
-def write_version(version: str) -> None:
     conf_path = ROOT / "src-tauri" / "tauri.conf.json"
     conf = json.loads(conf_path.read_text(encoding="utf-8"))
-    conf["version"] = version
-    conf_path.write_text(json.dumps(conf, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(f"  → tauri.conf.json actualizado a v{version}")
+    return conf["version"]
 
 
 def build() -> None:
-    print("  $ npm run tauri build -- --bundles nsis")
-    subprocess.run(
-        "npm run tauri build -- --bundles nsis",
-        check=True, cwd=ROOT, shell=True,
-    )
+    env = os.environ.copy()
+
+    if not env.get("TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
+        env["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = getpass.getpass("  Contraseña de la llave privada: ")
+
+    while True:
+        print("  $ npm run tauri build -- --bundles nsis")
+        result = subprocess.run("npm run tauri build -- --bundles nsis", cwd=ROOT, shell=True, env=env)
+        if result.returncode == 0:
+            return
+        answer = input("\n  ¿Contraseña incorrecta? Intentar de nuevo [s/N]: ").strip().lower()
+        if answer == "s":
+            env["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"] = getpass.getpass("  Contraseña de la llave privada: ")
+        else:
+            sys.exit(result.returncode)
 
 
 def find_artifacts() -> tuple[Path, Path]:
@@ -153,20 +168,17 @@ def main() -> None:
     check_env()
 
     version = get_version()
-    print(f"[1/5] Versión: {version}")
+    print(f"[1/4] Versión: {version}")
 
-    print("[2/5] Escribiendo versión en tauri.conf.json...")
-    write_version(version)
-
-    print("[3/5] Compilando (esto tarda ~5 min)...")
+    print("[2/4] Compilando (esto tarda ~5 min)...")
     build()
 
-    print("[4/5] Generando latest.json...")
+    print("[3/4] Generando latest.json...")
     zip_path, sig_path = find_artifacts()
     zip_safe = safe_name(zip_path.name)
     generate_latest_json(version, sig_path, zip_safe)
 
-    print("[5/5] Subiendo al servidor via SSH (cloud-api)...")
+    print("[4/4] Subiendo al servidor via SSH (cloud-api)...")
     upload(version, zip_path, sig_path, zip_safe)
 
     print(f"\n✓ Deploy completado — v{version}\n")
