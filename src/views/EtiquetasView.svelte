@@ -21,6 +21,15 @@
 	let cola = $state<ItemCola[]>([]);
 	let totalEtiquetas = $derived(cola.reduce((s, i) => s + i.cantidad, 0));
 
+	// ── Modo de impresión ──────────────────────────────────────
+	type ModoImpresion = '29x90' | '62mm' | 'carta';
+	let modoImpresion = $state<ModoImpresion>(
+		(localStorage.getItem('etiquetas_modo') as ModoImpresion) ?? '62mm'
+	);
+	$effect(() => {
+		localStorage.setItem('etiquetas_modo', modoImpresion);
+	});
+
 	// ── Búsqueda con debounce ──────────────────────────────────
 	onMount(() => {
 		mounted = true;
@@ -94,6 +103,40 @@
 	}
 
 	function imprimir() {
+		const es29    = modoImpresion === '29x90';
+		const esCarta = modoImpresion === 'carta';
+
+		const barcodeOpts = es29
+			? { format: 'CODE128', width: 1,   height: 28, displayValue: false, margin: 0 }
+			: esCarta
+			? { format: 'CODE128', width: 1.5, height: 40, displayValue: false, margin: 0 }
+			: { format: 'CODE128', width: 2,   height: 50, displayValue: false, margin: 0 };
+
+		const css = es29
+			? `* { box-sizing: border-box; margin: 0; padding: 0; }
+			@page { size: 29mm 90.3mm; margin: 1.5mm; }
+			.label-page { page-break-after: always; break-after: page; width: 26mm; padding: 1mm; font-family: monospace, sans-serif; }
+			.label-barcode { width: 100%; margin-bottom: 1.5mm; }
+			.label-barcode svg { width: 100%; height: auto; }
+			.label-numart { font-size: 9pt; font-weight: bold; letter-spacing: 0.03em; margin-bottom: 1mm; text-align: center; }
+			.label-desc { font-size: 6pt; line-height: 1.35; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: normal; word-break: break-word; }`
+			: esCarta
+			? `* { box-sizing: border-box; margin: 0; padding: 0; }
+			@page { size: letter; margin: 10mm; }
+			body { display: flex; flex-wrap: wrap; gap: 3mm; align-content: flex-start; }
+			.label-page { width: 62mm; height: 34mm; overflow: hidden; padding: 2mm; border: 0.4pt dashed #bbb; break-inside: avoid; page-break-inside: avoid; }
+			.label-barcode { width: 100%; margin-bottom: 1mm; }
+			.label-barcode svg { width: 100%; height: auto; }
+			.label-numart { font-size: 10pt; font-weight: bold; letter-spacing: 0.04em; margin-bottom: 0.5mm; text-align: center; font-family: monospace, sans-serif; }
+			.label-desc { font-size: 7pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`
+			: `* { box-sizing: border-box; margin: 0; padding: 0; }
+			@page { size: 62mm auto; margin: 3mm; }
+			.label-page { page-break-after: always; break-after: page; width: 56mm; padding: 2mm; font-family: monospace, sans-serif; }
+			.label-barcode { width: 100%; margin-bottom: 2mm; }
+			.label-barcode svg { width: 100%; height: auto; }
+			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
+			.label-desc { font-size: 9pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
+
 		const items = cola.flatMap((item) =>
 			Array.from({ length: item.cantidad }, () => item.articulo)
 		);
@@ -103,13 +146,7 @@
 			if (art.codigo) {
 				const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 				try {
-					JsBarcode(svg, art.codigo, {
-						format: 'CODE128',
-						width: 2,
-						height: 50,
-						displayValue: false,
-						margin: 0
-					});
+					JsBarcode(svg, art.codigo, barcodeOpts);
 					barcodeSvg = svg.outerHTML;
 				} catch {
 					// código inválido para Code128
@@ -122,15 +159,7 @@
 			</div>`;
 		});
 
-		const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-			* { box-sizing: border-box; margin: 0; padding: 0; }
-			@page { size: 90mm auto; margin: 3mm; }
-			.label-page { page-break-after: always; break-after: page; width: 84mm; padding: 2mm; font-family: monospace, sans-serif; }
-			.label-barcode { width: 100%; margin-bottom: 2mm; }
-			.label-barcode svg { width: 100%; height: auto; }
-			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
-			.label-desc { font-size: 9pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-		</style></head><body>${labels.join('')}</body></html>`;
+		const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${labels.join('')}</body></html>`;
 
 		const iframe = document.createElement('iframe');
 		iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;top:0;left:0;';
@@ -146,782 +175,389 @@
 	}
 </script>
 
-<!-- ── Layout principal ──────────────────────────────────── -->
-<div class="view-root">
+<!-- ── Wrapper ───────────────────────────────────────────── -->
+<div class="flex flex-col h-screen overflow-hidden bg-bg">
 
-	<!-- ── Panel izquierdo: catálogo ──────────────────────── -->
-	<div class="panel catalogue-panel">
-
-		<!-- Header -->
-		<div class="panel-header">
-			<div class="flex items-center gap-2.5 mb-3">
-				<div class="section-icon-wrap">
-					<svg class="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
-						<path d="M3 5h2M7 5h1M12 5h3M17 5h1M3 10h1M6 10h4M12 10h1M15 10h3M3 15h2M7 15h1M12 15h3M17 15h1M3 19h4M9 19h1M12 19h4M18 19h1"/>
-					</svg>
-				</div>
-				<div>
-					<h2 class="section-title">Catálogo</h2>
-					<p class="section-sub">
-						{#if cargando && articulos.length === 0}
-							cargando…
-						{:else}
-							{articulos.length} artículo{articulos.length !== 1 ? 's' : ''}{nextPageToken ? '+' : ''}
-						{/if}
-					</p>
-				</div>
+	<!-- ── Header oscuro estándar ────────────────────────────── -->
+	<div class="bg-[#0f1f38] px-4 pt-5 pb-4 md:px-6 flex-shrink-0">
+		<div class="flex items-center justify-between">
+			<div>
+				<p class="text-[11px] font-semibold tracking-[0.12em] uppercase text-white/40">Inventario</p>
+				<h1 class="font-barlow-condensed text-[22px] font-bold text-white leading-none">Etiquetas</h1>
 			</div>
 
-			<div class="search-wrap">
-				<svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<circle cx="11" cy="11" r="8"/>
-					<line x1="21" y1="21" x2="16.65" y2="16.65"/>
-				</svg>
-				<input
-					type="text"
-					placeholder="NUMART, descripción o código de barras…"
-					bind:value={query}
-					class="search-input"
-				/>
-				{#if query}
-					<button class="search-clear" onclick={() => (query = '')} aria-label="Limpiar búsqueda">
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-							<line x1="18" y1="6" x2="6" y2="18"/>
-							<line x1="6" y1="6" x2="18" y2="18"/>
-						</svg>
+			{#if cola.length > 0}
+				<div class="flex items-center gap-2">
+					<button
+						onclick={() => (cola = [])}
+						class="border border-white/20 text-white/70 hover:bg-white/10 active:bg-white/20
+							   px-3 py-1.5 rounded-lg text-[12px] font-medium font-barlow transition-colors"
+					>
+						Limpiar
 					</button>
-				{/if}
-			</div>
-		</div>
-
-		<!-- Lista -->
-		<div class="panel-body">
-			{#if cargando && articulos.length === 0}
-				<div class="state-center">
-					<div class="loading-dots">
-						<span></span><span></span><span></span>
-					</div>
-					<p class="state-text">Cargando artículos…</p>
-				</div>
-
-			{:else if errorMsg}
-				<div class="state-center">
-					<div style="color:#dc2626;opacity:.8;">
-						<svg class="w-9 h-9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-							<circle cx="12" cy="12" r="10"/>
-							<line x1="12" y1="8" x2="12" y2="12"/>
-							<line x1="12" y1="16" x2="12.01" y2="16"/>
-						</svg>
-					</div>
-					<p class="error-text">{errorMsg}</p>
-					<button class="btn-retry" onclick={buscar}>Reintentar</button>
-				</div>
-
-			{:else if articulos.length === 0}
-				<div class="state-center">
-					<svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round">
-						<circle cx="11" cy="11" r="8"/>
-						<line x1="21" y1="21" x2="16.65" y2="16.65"/>
-					</svg>
-					<p class="state-text">Sin resultados para "{query}"</p>
-				</div>
-
-			{:else}
-				<div>
-					{#each articulos as art (art.numart)}
-						<button onclick={() => agregarACola(art)} class="art-row">
-							<div class="art-info">
-								<div class="mb-1">
-									<span class="numart-badge">{art.numart}</span>
-								</div>
-								<p class="art-desc">{art.desc}</p>
-								{#if art.codigo}
-									<span class="barcode-chip has-code">
-										<svg class="w-[9px] h-[9px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-											<path d="M3 5h2M7 5h1M12 5h3M17 5h1M3 10h1M6 10h4M12 10h1M15 10h3M3 15h2M7 15h1M12 15h3M17 15h1M3 19h4M9 19h1M12 19h4M18 19h1"/>
-										</svg>
-										{art.codigo}
-									</span>
-								{:else}
-									<span class="barcode-chip no-code">
-										<svg class="w-[9px] h-[9px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-											<circle cx="12" cy="12" r="10"/>
-											<line x1="12" y1="8" x2="12" y2="12"/>
-											<line x1="12" y1="16" x2="12.01" y2="16"/>
-										</svg>
-										Sin código de barras
-									</span>
-								{/if}
-							</div>
-							<div class="add-btn">
-								<svg class="w-[11px] h-[11px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-									<line x1="12" y1="5" x2="12" y2="19"/>
-									<line x1="5" y1="12" x2="19" y2="12"/>
-								</svg>
-							</div>
-						</button>
-					{/each}
-
-					{#if nextPageToken}
-						<div class="p-4 flex justify-center">
-							<button onclick={cargarMas} disabled={cargandoMas} class="btn-load-more">
-								{cargandoMas ? 'Cargando…' : 'Cargar más artículos'}
-							</button>
-						</div>
-					{/if}
-				</div>
-			{/if}
-		</div>
-	</div>
-
-	<!-- ── Panel derecho: cola de impresión ───────────────── -->
-	<div class="panel queue-panel">
-
-		<!-- Header -->
-		<div class="panel-header">
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-2.5">
-					<div class="section-icon-wrap queue-icon">
-						<svg class="w-[15px] h-[15px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+					<button
+						onclick={imprimir}
+						class="flex items-center gap-1.5 bg-navy hover:bg-navy-light active:bg-navy-dark
+							   text-white px-3 py-1.5 rounded-lg text-[12px] font-semibold font-barlow transition-colors"
+					>
+						<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 							<polyline points="6 9 6 2 18 2 18 9"/>
 							<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
 							<rect x="6" y="14" width="12" height="8"/>
 						</svg>
+						Imprimir
+						<span class="ml-0.5 bg-white/20 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full leading-none">
+							{totalEtiquetas}
+						</span>
+					</button>
+				</div>
+			{/if}
+		</div>
+
+	</div>
+	<div class="h-px flex-shrink-0" style="background: linear-gradient(90deg, rgba(255,255,255,0.08) 0%, transparent 100%)"></div>
+
+	<!-- ── Cuerpo: 2 paneles ──────────────────────────────────── -->
+	<div class="flex flex-1 overflow-hidden">
+
+		<!-- ── Panel izquierdo: catálogo ──────────────────────── -->
+		<div class="flex flex-col w-[55%] overflow-hidden bg-surface border-r border-slate-200">
+
+			<!-- Header panel -->
+			<div class="px-4 py-3 border-b border-slate-200 flex-shrink-0">
+				<div class="flex items-center gap-2.5 mb-2.5">
+					<div class="w-7 h-7 rounded-lg flex items-center justify-center bg-navy/[0.08] border border-navy/20 text-navy flex-shrink-0">
+						<svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
+							<path d="M3 5h2M7 5h1M12 5h3M17 5h1M3 10h1M6 10h4M12 10h1M15 10h3M3 15h2M7 15h1M12 15h3M17 15h1M3 19h4M9 19h1M12 19h4M18 19h1"/>
+						</svg>
 					</div>
 					<div>
-						<h2 class="section-title">Impresión</h2>
-						<p class="section-sub">
-							{#if totalEtiquetas > 0}
-								<span class="total-pill">{totalEtiquetas}</span>
-								etiqueta{totalEtiquetas !== 1 ? 's' : ''} en cola
+						<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400">Catálogo</p>
+						<p class="font-mono text-[11px] text-slate-500 mt-0.5">
+							{#if cargando && articulos.length === 0}
+								cargando…
 							{:else}
-								cola vacía
+								{articulos.length} artículo{articulos.length !== 1 ? 's' : ''}{nextPageToken ? '+' : ''}
 							{/if}
 						</p>
 					</div>
 				</div>
 
-				{#if cola.length > 0}
-					<div class="flex items-center gap-2">
-						<button onclick={() => (cola = [])} class="btn-clear">Limpiar</button>
-						<button onclick={imprimir} class="btn-print">
-							<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-								<polyline points="6 9 6 2 18 2 18 9"/>
-								<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
-								<rect x="6" y="14" width="12" height="8"/>
+				<!-- Search -->
+				<div class="relative">
+					<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="11" cy="11" r="8"/>
+						<line x1="21" y1="21" x2="16.65" y2="16.65"/>
+					</svg>
+					<input
+						type="text"
+						placeholder="NUMART, descripción o código de barras…"
+						value={query}
+						oninput={(e) => (query = e.currentTarget.value.toUpperCase())}
+						class="w-full pl-8 pr-8 py-1.5 rounded-lg bg-slate-100 border border-slate-200
+							   text-[12px] text-slate-700 placeholder:text-slate-400 uppercase
+							   focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy/40
+							   focus:bg-white transition-all"
+					/>
+					{#if query}
+						<button
+							class="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center
+								   text-slate-400 hover:text-slate-600 transition-colors"
+							onclick={() => (query = '')}
+							aria-label="Limpiar búsqueda"
+						>
+							<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="w-3 h-3">
+								<line x1="18" y1="6" x2="6" y2="18"/>
+								<line x1="6" y1="6" x2="18" y2="18"/>
 							</svg>
-							Imprimir
 						</button>
+					{/if}
+				</div>
+			</div>
+
+			<!-- Lista -->
+			<div class="flex-1 overflow-y-auto scrollbar-thin">
+				{#if cargando && articulos.length === 0}
+					<div class="flex flex-col items-center justify-center h-full min-h-[180px] gap-2 p-6">
+						<div class="flex gap-1.5 mb-1">
+							<span class="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse [animation-delay:0ms]"></span>
+							<span class="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse [animation-delay:200ms]"></span>
+							<span class="w-1.5 h-1.5 rounded-full bg-slate-300 animate-pulse [animation-delay:400ms]"></span>
+						</div>
+						<p class="text-[12px] text-slate-400">Cargando artículos…</p>
+					</div>
+
+				{:else if errorMsg}
+					<div class="flex flex-col items-center justify-center h-full min-h-[180px] gap-2 p-6">
+						<svg class="w-9 h-9 text-red-400 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+							<circle cx="12" cy="12" r="10"/>
+							<line x1="12" y1="8" x2="12" y2="12"/>
+							<line x1="12" y1="16" x2="12.01" y2="16"/>
+						</svg>
+						<p class="text-[12px] text-red-500 text-center max-w-[280px] leading-relaxed">{errorMsg}</p>
+						<button
+							class="mt-1 px-3.5 py-1 text-[11.5px] text-red-600 bg-red-50 border border-red-200 rounded-lg
+								   hover:bg-red-100 transition-colors"
+							onclick={buscar}
+						>Reintentar</button>
+					</div>
+
+				{:else if articulos.length === 0}
+					<div class="flex flex-col items-center justify-center h-full min-h-[180px] gap-1.5 p-6">
+						<svg class="w-10 h-10 text-slate-300 mb-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round">
+							<circle cx="11" cy="11" r="8"/>
+							<line x1="21" y1="21" x2="16.65" y2="16.65"/>
+						</svg>
+						<p class="text-[12px] text-slate-400 text-center">Sin resultados para "{query}"</p>
+					</div>
+
+				{:else}
+					<div>
+						{#each articulos as art (art.numart)}
+							<button
+								onclick={() => agregarACola(art)}
+								class="flex items-start gap-2.5 w-full text-left px-4 py-2.5
+									   border-b border-slate-100 border-l-2 border-l-transparent
+									   hover:bg-slate-50 hover:border-l-navy transition-all group"
+							>
+								<div class="flex-1 min-w-0">
+									<div class="mb-1">
+										<span class="inline-block font-mono text-[10px] font-bold tracking-wide
+											         text-amber-800 bg-amber-100 border border-amber-300
+											         px-1.5 py-0.5 rounded leading-none">
+											{art.numart}
+										</span>
+									</div>
+									<p class="text-[12px] text-slate-600 leading-snug overflow-hidden text-ellipsis whitespace-nowrap mb-1">
+										{art.desc}
+									</p>
+									{#if art.codigo}
+										<span class="inline-flex items-center gap-1 font-mono text-[9.5px] font-semibold
+											         text-teal-700 bg-teal-50 border border-teal-200
+											         px-1.5 py-0.5 rounded leading-none">
+											<svg class="w-[9px] h-[9px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+												<path d="M3 5h2M7 5h1M12 5h3M17 5h1M3 10h1M6 10h4M12 10h1M15 10h3M3 15h2M7 15h1M12 15h3M17 15h1M3 19h4M9 19h1M12 19h4M18 19h1"/>
+											</svg>
+											{art.codigo}
+										</span>
+									{:else}
+										<span class="inline-flex items-center gap-1 font-mono text-[9.5px] font-semibold
+											         text-red-500 bg-red-50 border border-red-200
+											         px-1.5 py-0.5 rounded leading-none">
+											<svg class="w-[9px] h-[9px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+												<circle cx="12" cy="12" r="10"/>
+												<line x1="12" y1="8" x2="12" y2="12"/>
+												<line x1="12" y1="16" x2="12.01" y2="16"/>
+											</svg>
+											Sin código de barras
+										</span>
+									{/if}
+								</div>
+								<div class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center
+									        text-slate-400 mt-0.5 group-hover:bg-navy/[0.08] group-hover:text-navy transition-all">
+									<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+										<line x1="12" y1="5" x2="12" y2="19"/>
+										<line x1="5" y1="12" x2="19" y2="12"/>
+									</svg>
+								</div>
+							</button>
+						{/each}
+
+						{#if nextPageToken}
+							<div class="p-4 flex justify-center">
+								<button
+									onclick={cargarMas}
+									disabled={cargandoMas}
+									class="px-4 py-1.5 text-[11.5px] text-slate-500 border border-slate-200 rounded-lg
+										   hover:border-slate-300 hover:text-slate-700 hover:bg-slate-50
+										   transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+								>
+									{cargandoMas ? 'Cargando…' : 'Cargar más artículos'}
+								</button>
+							</div>
+						{/if}
 					</div>
 				{/if}
 			</div>
 		</div>
 
-		<!-- Cola -->
-		<div class="panel-body">
-			{#if cola.length === 0}
-				<div class="state-center queue-empty">
-					<svg class="empty-printer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round">
-						<polyline points="6 9 6 2 18 2 18 9"/>
-						<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
-						<rect x="6" y="14" width="12" height="8"/>
-					</svg>
-					<p class="empty-title">Cola vacía</p>
-					<p class="empty-sub">
-						Selecciona artículos del catálogo<br />para agregarlos a la lista de impresión
-					</p>
-				</div>
-			{:else}
-				<div class="queue-list">
-					{#each cola as item (item.articulo.numart)}
-						<div class="queue-card">
-							<div class="queue-card-info">
-								<span class="numart-badge">{item.articulo.numart}</span>
-								<p class="queue-desc">{item.articulo.desc}</p>
-								{#if item.articulo.codigo}
-									<p class="queue-code">{item.articulo.codigo}</p>
-								{/if}
-							</div>
+		<!-- ── Panel derecho: cola de impresión ───────────────── -->
+		<div class="flex flex-col flex-1 overflow-hidden bg-bg">
 
-							<div class="qty-stepper">
-								<button
-									onclick={() => setCantidad(item.articulo.numart, item.cantidad - 1)}
-									class="qty-btn"
-								>−</button>
-								<input
-									type="number"
-									min="1"
-									value={item.cantidad}
-									oninput={(e) => {
-										const v = parseInt((e.target as HTMLInputElement).value);
-										if (!isNaN(v)) setCantidad(item.articulo.numart, v);
-									}}
-									class="qty-input"
-								/>
-								<button
-									onclick={() => setCantidad(item.articulo.numart, item.cantidad + 1)}
-									class="qty-btn"
-								>+</button>
-							</div>
-
-							<button
-								onclick={() => quitarDeCola(item.articulo.numart)}
-								class="remove-btn"
-								aria-label="Quitar de la cola"
-							>
-								<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-									<line x1="18" y1="6" x2="6" y2="18"/>
-									<line x1="6" y1="6" x2="18" y2="18"/>
-								</svg>
-							</button>
+			<!-- Header panel -->
+			<div class="px-4 py-3 border-b border-slate-200 flex-shrink-0 bg-surface">
+				<div class="flex items-center justify-between gap-3">
+					<div class="flex items-center gap-2.5">
+						<div class="w-7 h-7 rounded-lg flex items-center justify-center bg-navy/[0.08] border border-navy/20 text-navy flex-shrink-0">
+							<svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+								<polyline points="6 9 6 2 18 2 18 9"/>
+								<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+								<rect x="6" y="14" width="12" height="8"/>
+							</svg>
 						</div>
-					{/each}
+						<div>
+							<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400">Impresión</p>
+							<p class="font-mono text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5">
+								{#if totalEtiquetas > 0}
+									<span class="inline-flex items-center justify-center min-w-[18px] h-[16px] px-1.5
+										         bg-navy text-white rounded-full text-[10px] font-bold leading-none">
+										{totalEtiquetas}
+									</span>
+									etiqueta{totalEtiquetas !== 1 ? 's' : ''} en cola
+								{:else}
+									cola vacía
+								{/if}
+							</p>
+						</div>
+					</div>
+
+					<!-- Selector de formato -->
+					<div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5 flex-shrink-0" role="group" aria-label="Modo de impresión">
+						<button
+							class="flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-barlow transition-all
+								   {modoImpresion === '29x90' ? 'bg-white text-slate-700 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'}"
+							onclick={() => (modoImpresion = '29x90')}
+							title="Etiqueta vertical 29mm × 90.3mm"
+						>
+							<svg viewBox="0 0 9 22" width="7" height="17" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+								<rect x="0.75" y="0.75" width="7.5" height="20.5" rx="1.25" stroke-width="1.4" fill="currentColor" fill-opacity="0.1"/>
+								<line x1="2.5" y1="4"    x2="6.5" y2="4"    stroke-width="0.9"/>
+								<line x1="2.5" y1="5.5"  x2="6.5" y2="5.5"  stroke-width="0.9"/>
+								<line x1="2.5" y1="7"    x2="6.5" y2="7"    stroke-width="0.9"/>
+								<line x1="2.5" y1="11"   x2="6.5" y2="11"   stroke-width="1.2"/>
+								<line x1="3"   y1="14"   x2="6"   y2="14"   stroke-width="0.8"/>
+								<line x1="2.5" y1="16.5" x2="6.5" y2="16.5" stroke-width="0.8"/>
+							</svg>
+							<span>29×90</span>
+						</button>
+						<button
+							class="flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-barlow transition-all
+								   {modoImpresion === '62mm' ? 'bg-white text-slate-700 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'}"
+							onclick={() => (modoImpresion = '62mm')}
+							title="Etiqueta continua 62mm de ancho"
+						>
+							<svg viewBox="0 0 28 13" width="15" height="7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+								<rect x="0.75" y="0.75" width="26.5" height="11.5" rx="1.25" stroke-width="1.4" fill="currentColor" fill-opacity="0.1"/>
+								<line x1="3"   y1="2.5" x2="3"   y2="10.5" stroke-width="0.9"/>
+								<line x1="4.5" y1="2.5" x2="4.5" y2="10.5" stroke-width="0.9"/>
+								<line x1="6"   y1="2.5" x2="6"   y2="10.5" stroke-width="0.9"/>
+								<line x1="7.5" y1="2.5" x2="7.5" y2="10.5" stroke-width="0.9"/>
+								<line x1="10"  y1="4"   x2="26"  y2="4"    stroke-width="1.2"/>
+								<line x1="10"  y1="6.5" x2="23"  y2="6.5"  stroke-width="0.8"/>
+								<line x1="10"  y1="9"   x2="25"  y2="9"    stroke-width="0.8"/>
+							</svg>
+							<span>62mm</span>
+						</button>
+						<button
+							class="flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-barlow transition-all
+								   {modoImpresion === 'carta' ? 'bg-white text-slate-700 shadow-sm font-semibold' : 'text-slate-500 hover:text-slate-700'}"
+							onclick={() => (modoImpresion = 'carta')}
+							title="Hoja carta — múltiples etiquetas 62mm"
+						>
+							<svg viewBox="0 0 18 22" width="11" height="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+								<rect x="0.75"  y="0.75"  width="16.5" height="20.5" rx="1.25" stroke-width="1.4" fill="currentColor" fill-opacity="0.1"/>
+								<rect x="2"  y="3"    width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="7"  y="3"    width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="12" y="3"    width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="2"  y="7.5"  width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="7"  y="7.5"  width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="12" y="7.5"  width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="2"  y="12"   width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="7"  y="12"   width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="12" y="12"   width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="2"  y="16.5" width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="7"  y="16.5" width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+								<rect x="12" y="16.5" width="4" height="3" rx="0.4" stroke-width="0.8" fill="currentColor" fill-opacity="0.15"/>
+							</svg>
+							<span>Carta</span>
+						</button>
+					</div>
 				</div>
-			{/if}
+			</div>
+
+			<!-- Cola -->
+			<div class="flex-1 overflow-y-auto scrollbar-thin">
+				{#if cola.length === 0}
+					<div class="flex flex-col items-center justify-center h-full min-h-[180px] gap-1.5 p-6">
+						<svg class="w-16 h-16 text-slate-300 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round">
+							<polyline points="6 9 6 2 18 2 18 9"/>
+							<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+							<rect x="6" y="14" width="12" height="8"/>
+						</svg>
+						<p class="font-barlow-condensed text-[14px] font-bold text-slate-400 tracking-wide uppercase">
+							Cola vacía
+						</p>
+						<p class="text-[11.5px] text-slate-400 text-center leading-relaxed">
+							Selecciona artículos del catálogo<br/>para agregarlos a la lista de impresión
+						</p>
+					</div>
+				{:else}
+					<div class="p-3 flex flex-col gap-1.5">
+						{#each cola as item (item.articulo.numart)}
+							<div class="flex items-center gap-2.5 px-3 py-2.5 bg-surface border border-slate-200
+								        rounded-card shadow-card hover:shadow-card-md transition-all">
+								<div class="flex-1 min-w-0">
+									<span class="inline-block font-mono text-[10px] font-bold tracking-wide
+										         text-amber-800 bg-amber-100 border border-amber-300
+										         px-1.5 py-0.5 rounded leading-none mb-1">
+										{item.articulo.numart}
+									</span>
+									<p class="text-[12px] text-slate-600 leading-snug overflow-hidden text-ellipsis whitespace-nowrap">
+										{item.articulo.desc}
+									</p>
+									{#if item.articulo.codigo}
+										<p class="font-mono text-[9.5px] text-slate-400 mt-0.5">{item.articulo.codigo}</p>
+									{/if}
+								</div>
+
+								<!-- Stepper de cantidad -->
+								<div class="flex items-center border border-slate-200 rounded-lg overflow-hidden flex-shrink-0">
+									<button
+										onclick={() => setCantidad(item.articulo.numart, item.cantidad - 1)}
+										class="w-6 h-7 flex items-center justify-center bg-slate-50 text-slate-500 text-[15px] leading-none
+											   hover:bg-slate-100 hover:text-slate-700 transition-colors"
+									>−</button>
+									<input
+										type="number"
+										min="1"
+										value={item.cantidad}
+										oninput={(e) => {
+											const v = parseInt((e.target as HTMLInputElement).value);
+											if (!isNaN(v)) setCantidad(item.articulo.numart, v);
+										}}
+										class="qty-input w-8 h-7 text-center text-[12px] font-mono font-semibold text-slate-700
+											   bg-white border-x border-slate-200 outline-none"
+									/>
+									<button
+										onclick={() => setCantidad(item.articulo.numart, item.cantidad + 1)}
+										class="w-6 h-7 flex items-center justify-center bg-slate-50 text-slate-500 text-[15px] leading-none
+											   hover:bg-slate-100 hover:text-slate-700 transition-colors"
+									>+</button>
+								</div>
+
+								<button
+									onclick={() => quitarDeCola(item.articulo.numart)}
+									class="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-md
+										   text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all"
+									aria-label="Quitar de la cola"
+								>
+									<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+										<line x1="18" y1="6" x2="6" y2="18"/>
+										<line x1="6" y1="6" x2="18" y2="18"/>
+									</svg>
+								</button>
+							</div>
+						{/each}
+					</div>
+				{/if}
+			</div>
 		</div>
 	</div>
 </div>
 
 <style>
-	/* ── Root & panels ───────────────────────────────────── */
-	.view-root {
-		display: flex;
-		height: 100vh;
-		overflow: hidden;
-		background: #e8edf2;
-	}
-
-	.panel {
-		display: flex;
-		flex-direction: column;
-		overflow: hidden;
-	}
-
-	.catalogue-panel {
-		width: 55%;
-		background: #ffffff;
-		border-right: 1px solid #dde3ea;
-	}
-
-	.queue-panel {
-		width: 45%;
-		background: #f4f7fa;
-	}
-
-	/* ── Panel header ────────────────────────────────────── */
-	.panel-header {
-		padding: 14px 16px 12px;
-		background: #ffffff;
-		border-bottom: 1px solid #e4e9f0;
-		flex-shrink: 0;
-	}
-
-	.queue-panel .panel-header {
-		background: #f4f7fa;
-		border-bottom-color: #dde3ea;
-	}
-
-	.section-icon-wrap {
-		width: 30px;
-		height: 30px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: rgba(13, 148, 136, 0.1);
-		border: 1px solid rgba(13, 148, 136, 0.22);
-		border-radius: 7px;
-		color: #0d9488;
-		flex-shrink: 0;
-	}
-
-	.section-icon-wrap.queue-icon {
-		background: rgba(225, 29, 72, 0.08);
-		border-color: rgba(225, 29, 72, 0.22);
-		color: #e11d48;
-	}
-
-	.section-title {
-		font-family: 'Barlow Condensed', sans-serif;
-		font-size: 14px;
-		font-weight: 700;
-		color: #1e293b;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		line-height: 1;
-		margin: 0;
-	}
-
-	.section-sub {
-		display: flex;
-		align-items: center;
-		gap: 5px;
-		font-size: 10.5px;
-		color: #94a3b8;
-		margin-top: 4px;
-		font-family: ui-monospace, monospace;
-		line-height: 1;
-	}
-
-	.total-pill {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 18px;
-		height: 16px;
-		padding: 0 5px;
-		background: #e11d48;
-		color: white;
-		border-radius: 8px;
-		font-size: 10px;
-		font-weight: 700;
-		font-family: ui-monospace, monospace;
-		line-height: 1;
-	}
-
-	/* ── Search ──────────────────────────────────────────── */
-	.search-wrap {
-		position: relative;
-		display: flex;
-		align-items: center;
-	}
-
-	.search-icon {
-		position: absolute;
-		left: 10px;
-		width: 13px;
-		height: 13px;
-		color: #94a3b8;
-		pointer-events: none;
-	}
-
-	.search-input {
-		width: 100%;
-		padding: 7px 32px 7px 30px;
-		background: #f1f5f9;
-		border: 1px solid #dde3ea;
-		border-radius: 7px;
-		font-size: 12px;
-		color: #1e293b;
-		outline: none;
-		transition: border-color 0.15s, background 0.15s;
-		font-family: inherit;
-	}
-
-	.search-input::placeholder {
-		color: #94a3b8;
-	}
-
-	.search-input:focus {
-		border-color: #0d9488;
-		background: #ffffff;
-		box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.08);
-	}
-
-	.search-clear {
-		position: absolute;
-		right: 7px;
-		width: 18px;
-		height: 18px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: #94a3b8;
-		background: none;
-		border: none;
-		cursor: pointer;
-		padding: 0;
-		transition: color 0.12s;
-	}
-
-	.search-clear svg {
-		width: 10px;
-		height: 10px;
-	}
-
-	.search-clear:hover {
-		color: #475569;
-	}
-
-	/* ── Panel body ──────────────────────────────────────── */
-	.panel-body {
-		flex: 1;
-		overflow-y: auto;
-		scrollbar-width: thin;
-		scrollbar-color: #cbd5e1 transparent;
-	}
-
-	/* ── States ──────────────────────────────────────────── */
-	.state-center {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		height: 100%;
-		min-height: 180px;
-		padding: 24px;
-		gap: 8px;
-	}
-
-	.state-text {
-		font-size: 12px;
-		color: #94a3b8;
-		text-align: center;
-	}
-
-	.empty-icon {
-		width: 38px;
-		height: 38px;
-		color: #cbd5e1;
-		margin-bottom: 4px;
-	}
-
-	.error-text {
-		font-size: 12px;
-		color: #dc2626;
-		text-align: center;
-		max-width: 280px;
-		line-height: 1.5;
-	}
-
-	.btn-retry {
-		margin-top: 4px;
-		padding: 5px 14px;
-		font-size: 11.5px;
-		color: #dc2626;
-		background: #fef2f2;
-		border: 1px solid #fca5a5;
-		border-radius: 6px;
-		cursor: pointer;
-		transition: background 0.12s;
-	}
-
-	.btn-retry:hover {
-		background: #fee2e2;
-	}
-
-	/* Loading dots */
-	.loading-dots {
-		display: flex;
-		gap: 5px;
-		margin-bottom: 4px;
-	}
-
-	.loading-dots span {
-		width: 5px;
-		height: 5px;
-		background: #cbd5e1;
-		border-radius: 50%;
-		animation: dot-pulse 1.2s ease-in-out infinite;
-	}
-
-	.loading-dots span:nth-child(2) { animation-delay: 0.18s; }
-	.loading-dots span:nth-child(3) { animation-delay: 0.36s; }
-
-	@keyframes dot-pulse {
-		0%, 60%, 100% { opacity: 0.3; transform: scale(1); }
-		30% { opacity: 1; transform: scale(1.4); }
-	}
-
-	/* ── Article rows ────────────────────────────────────── */
-	.art-row {
-		display: flex;
-		align-items: flex-start;
-		gap: 10px;
-		padding: 9px 14px 9px 16px;
-		border-left: 2px solid transparent;
-		background: transparent;
-		width: 100%;
-		text-align: left;
-		cursor: pointer;
-		border-bottom: 1px solid #f1f5f9;
-		transition: background 0.1s ease, border-left-color 0.1s ease;
-	}
-
-	.art-row:hover {
-		background: #f8fafc;
-		border-left-color: #e11d48;
-	}
-
-	.art-info {
-		flex: 1;
-		min-width: 0;
-	}
-
-	.numart-badge {
-		display: inline-block;
-		font-family: ui-monospace, monospace;
-		font-size: 10px;
-		font-weight: 700;
-		letter-spacing: 0.07em;
-		color: #92400e;
-		background: #fef3c7;
-		border: 1px solid #fcd34d;
-		padding: 2px 6px;
-		border-radius: 4px;
-		line-height: 1.5;
-	}
-
-	.art-desc {
-		font-size: 12px;
-		color: #334155;
-		line-height: 1.35;
-		margin: 3px 0 3px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.barcode-chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		font-family: ui-monospace, monospace;
-		font-size: 9.5px;
-		font-weight: 600;
-		padding: 2px 6px;
-		border-radius: 4px;
-		border: 1px solid;
-		line-height: 1.5;
-	}
-
-	.barcode-chip.has-code {
-		color: #0f766e;
-		background: #f0fdfa;
-		border-color: #99f6e4;
-	}
-
-	.barcode-chip.no-code {
-		color: #dc2626;
-		background: #fef2f2;
-		border-color: #fca5a5;
-	}
-
-	.add-btn {
-		flex-shrink: 0;
-		width: 20px;
-		height: 20px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 50%;
-		background: #f1f5f9;
-		color: #94a3b8;
-		margin-top: 3px;
-		transition: background 0.1s, color 0.1s;
-	}
-
-	.art-row:hover .add-btn {
-		background: rgba(225, 29, 72, 0.1);
-		color: #e11d48;
-	}
-
-	/* ── Load more ───────────────────────────────────────── */
-	.btn-load-more {
-		padding: 6px 16px;
-		font-size: 11.5px;
-		color: #64748b;
-		background: transparent;
-		border: 1px solid #dde3ea;
-		border-radius: 6px;
-		cursor: pointer;
-		transition: all 0.12s;
-	}
-
-	.btn-load-more:hover:not(:disabled) {
-		color: #334155;
-		border-color: #94a3b8;
-		background: #f8fafc;
-	}
-
-	.btn-load-more:disabled {
-		opacity: 0.45;
-		cursor: not-allowed;
-	}
-
-	/* ── Header action buttons ───────────────────────────── */
-	.btn-clear {
-		padding: 5px 11px;
-		font-size: 11.5px;
-		color: #64748b;
-		background: transparent;
-		border: 1px solid #dde3ea;
-		border-radius: 6px;
-		cursor: pointer;
-		transition: all 0.12s;
-	}
-
-	.btn-clear:hover {
-		color: #334155;
-		border-color: #94a3b8;
-		background: #ffffff;
-	}
-
-	.btn-print {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 6px 14px;
-		font-size: 12px;
-		font-weight: 600;
-		color: white;
-		background: #e11d48;
-		border: none;
-		border-radius: 6px;
-		cursor: pointer;
-		transition: background 0.15s, box-shadow 0.15s;
-		font-family: 'Barlow', sans-serif;
-		letter-spacing: 0.02em;
-	}
-
-	.btn-print:hover {
-		background: #be123c;
-		box-shadow: 0 2px 10px rgba(225, 29, 72, 0.3);
-	}
-
-	/* ── Queue empty state ───────────────────────────────── */
-	.queue-empty {
-		gap: 6px;
-	}
-
-	.empty-printer-icon {
-		width: 68px;
-		height: 68px;
-		color: #dde3ea;
-		margin-bottom: 8px;
-	}
-
-	.empty-title {
-		font-family: 'Barlow Condensed', sans-serif;
-		font-size: 14px;
-		font-weight: 700;
-		color: #94a3b8;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-	}
-
-	.empty-sub {
-		font-size: 11.5px;
-		color: #94a3b8;
-		text-align: center;
-		line-height: 1.65;
-	}
-
-	/* ── Queue cards ─────────────────────────────────────── */
-	.queue-list {
-		padding: 10px;
-		display: flex;
-		flex-direction: column;
-		gap: 5px;
-	}
-
-	.queue-card {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 10px 11px;
-		background: #ffffff;
-		border: 1px solid #e4e9f0;
-		border-radius: 8px;
-		transition: border-color 0.12s, box-shadow 0.12s;
-	}
-
-	.queue-card:hover {
-		border-color: #94a3b8;
-		box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-	}
-
-	.queue-card-info {
-		flex: 1;
-		min-width: 0;
-	}
-
-	.queue-desc {
-		font-size: 12px;
-		color: #334155;
-		line-height: 1.35;
-		margin: 3px 0 2px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.queue-code {
-		font-family: ui-monospace, monospace;
-		font-size: 9.5px;
-		color: #94a3b8;
-		margin-top: 1px;
-	}
-
-	/* ── Quantity stepper ────────────────────────────────── */
-	.qty-stepper {
-		display: flex;
-		align-items: center;
-		flex-shrink: 0;
-		border: 1px solid #dde3ea;
-		border-radius: 6px;
-		overflow: hidden;
-	}
-
-	.qty-btn {
-		width: 25px;
-		height: 27px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: #f8fafc;
-		border: none;
-		color: #475569;
-		cursor: pointer;
-		font-size: 15px;
-		line-height: 1;
-		transition: background 0.1s, color 0.1s;
-	}
-
-	.qty-btn:hover {
-		background: #f1f5f9;
-		color: #1e293b;
-	}
-
-	.qty-input {
-		width: 34px;
-		height: 27px;
-		text-align: center;
-		font-size: 12px;
-		font-family: ui-monospace, monospace;
-		font-weight: 600;
-		color: #1e293b;
-		background: #ffffff;
-		border: none;
-		border-left: 1px solid #dde3ea;
-		border-right: 1px solid #dde3ea;
-		outline: none;
-		-moz-appearance: textfield;
-	}
-
 	.qty-input::-webkit-inner-spin-button,
 	.qty-input::-webkit-outer-spin-button {
 		-webkit-appearance: none;
 	}
-
-	/* ── Remove button ───────────────────────────────────── */
-	.remove-btn {
-		flex-shrink: 0;
-		width: 25px;
-		height: 25px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 6px;
-		background: transparent;
-		border: none;
-		color: #94a3b8;
-		cursor: pointer;
-		transition: background 0.1s, color 0.1s;
-	}
-
-	.remove-btn:hover {
-		background: #fef2f2;
-		color: #dc2626;
-	}
-
 </style>
