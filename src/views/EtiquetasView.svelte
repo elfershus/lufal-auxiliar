@@ -102,7 +102,7 @@
 		return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 	}
 
-	async function imprimir() {
+	function imprimir() {
 		const es29    = modoImpresion === '29x90';
 		const esCarta = modoImpresion === 'carta';
 
@@ -111,13 +111,6 @@
 			: esCarta
 			? { format: 'CODE128', width: 1.5, height: 40, displayValue: false, margin: 0 }
 			: { format: 'CODE128', width: 2,   height: 50, displayValue: false, margin: 0 };
-
-		const css62base = `* { box-sizing: border-box; margin: 0; padding: 0; }
-			.label-page { page-break-after: always; break-after: page; width: 100%; padding: 2mm; font-family: monospace, sans-serif; }
-			.label-barcode { width: 100%; margin-bottom: 2mm; }
-			.label-barcode svg { width: 100%; height: auto; }
-			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
-			.label-desc { font-size: 9pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
 
 		const css = es29
 			? `* { box-sizing: border-box; margin: 0; padding: 0; }
@@ -136,7 +129,13 @@
 			.label-barcode svg { width: 100%; height: auto; }
 			.label-numart { font-size: 10pt; font-weight: bold; letter-spacing: 0.04em; margin-bottom: 0.5mm; text-align: center; font-family: monospace, sans-serif; }
 			.label-desc { font-size: 7pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`
-			: css62base;
+			: `* { box-sizing: border-box; margin: 0; padding: 0; }
+			@page { size: 62mm auto; margin: 3mm; }
+			.label-page { page-break-after: always; break-after: page; width: 56mm; padding: 2mm; font-family: monospace, sans-serif; }
+			.label-barcode { width: 100%; margin-bottom: 2mm; }
+			.label-barcode svg { width: 100%; height: auto; }
+			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
+			.label-desc { font-size: 9pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
 
 		const items = cola.flatMap((item) =>
 			Array.from({ length: item.cantidad }, () => item.articulo)
@@ -163,37 +162,13 @@
 		const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${labels.join('')}</body></html>`;
 
 		const iframe = document.createElement('iframe');
+		iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;top:0;left:0;';
 		document.body.appendChild(iframe);
 
-		if (!es29 && !esCarta) {
-			// Renderizar en ancho real para medir el alto exacto del contenido
-			iframe.style.cssText = 'position:fixed;width:62mm;top:-9999px;left:0;border:0;visibility:hidden;';
-			const doc = iframe.contentDocument!;
-			doc.open();
-			doc.write(html);
-			doc.close();
-
-			// Esperar a que el navegador termine el layout
-			await new Promise<void>((r) => setTimeout(r, 80));
-
-			const labelEl = doc.querySelector('.label-page') as HTMLElement | null;
-			const heightPx = labelEl ? labelEl.offsetHeight : doc.body.scrollHeight;
-			// px → mm (96dpi); margin: 0 en @page, así que no se suma nada extra
-			const heightMm = Math.ceil(heightPx * 25.4 / 96);
-
-			const pageStyle = doc.createElement('style');
-			// margin: 0 elimina los headers/footers del navegador (número de página, URL, etc.)
-			pageStyle.textContent = `@page { size: 62mm ${heightMm}mm; margin: 0; }`;
-			doc.head.appendChild(pageStyle);
-
-			iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;top:0;left:0;';
-		} else {
-			iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;top:0;left:0;';
-			const doc = iframe.contentDocument!;
-			doc.open();
-			doc.write(html);
-			doc.close();
-		}
+		const doc = iframe.contentDocument!;
+		doc.open();
+		doc.write(html);
+		doc.close();
 
 		iframe.contentWindow!.print();
 		setTimeout(() => document.body.removeChild(iframe), 2000);
@@ -337,15 +312,13 @@
 					</div>
 
 				{:else}
-					<div class="p-2.5 flex flex-col gap-1.5">
+					<div>
 						{#each articulos as art (art.numart)}
 							<button
 								onclick={() => agregarACola(art)}
-								class="flex items-start gap-2.5 w-full text-left px-3.5 py-2.5
-									   bg-white border border-slate-200 rounded-lg
-									   border-l-[3px] border-l-slate-200
-									   hover:border-l-navy hover:border-slate-300 hover:shadow-sm
-									   active:scale-[0.99] transition-all group"
+								class="flex items-start gap-2.5 w-full text-left px-4 py-2.5
+									   border-b border-slate-100 border-l-2 border-l-transparent
+									   hover:bg-slate-50 hover:border-l-navy transition-all group"
 							>
 								<div class="flex-1 min-w-0">
 									<div class="mb-1">
