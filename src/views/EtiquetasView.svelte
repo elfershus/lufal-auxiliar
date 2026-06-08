@@ -113,7 +113,7 @@
 			: { format: 'CODE128', width: 2,   height: 50, displayValue: false, margin: 0 };
 
 		const css62base = `* { box-sizing: border-box; margin: 0; padding: 0; }
-			.label-page { page-break-after: always; break-after: page; width: 56mm; padding: 2mm; font-family: monospace, sans-serif; }
+			.label-page { page-break-after: always; break-after: page; width: 100%; padding: 2mm; font-family: monospace, sans-serif; }
 			.label-barcode { width: 100%; margin-bottom: 2mm; }
 			.label-barcode svg { width: 100%; height: auto; }
 			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
@@ -178,11 +178,12 @@
 
 			const labelEl = doc.querySelector('.label-page') as HTMLElement | null;
 			const heightPx = labelEl ? labelEl.offsetHeight : doc.body.scrollHeight;
-			// px → mm (96dpi) + 6mm de márgenes de página (3mm arriba + 3mm abajo)
-			const heightMm = Math.ceil(heightPx * 25.4 / 96) + 6;
+			// px → mm (96dpi); margin: 0 en @page, así que no se suma nada extra
+			const heightMm = Math.ceil(heightPx * 25.4 / 96);
 
 			const pageStyle = doc.createElement('style');
-			pageStyle.textContent = `@page { size: 62mm ${heightMm}mm; margin: 3mm; }`;
+			// margin: 0 elimina los headers/footers del navegador (número de página, URL, etc.)
+			pageStyle.textContent = `@page { size: 62mm ${heightMm}mm; margin: 0; }`;
 			doc.head.appendChild(pageStyle);
 
 			iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;top:0;left:0;';
