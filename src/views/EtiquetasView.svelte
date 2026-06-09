@@ -152,7 +152,7 @@
 		ctx.fillText(art.numart, W / 2, y);
 		y += numartPx + Math.round((1 * DPI) / 25.4) * SCALE;
 
-		const descPx = Math.round((7 * DPI) / 72) * SCALE;
+		const descPx = Math.round((6 * DPI) / 72) * SCALE;
 		ctx.font = `${descPx}px "Arial Narrow", Arial, sans-serif`;
 		ctx.textAlign = 'left';
 		let desc = art.desc;
@@ -203,7 +203,7 @@
 			.label-barcode { width: 100%; margin-bottom: 2mm; }
 			.label-barcode svg { width: 100%; height: auto; }
 			.label-numart { font-size: 14pt; font-weight: bold; font-family: Arial, sans-serif; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
-			.label-desc { font-size: 7pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
+			.label-desc { font-size: 6pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
 
 		const firstItem = rendered[0];
 		const sampleDiv = `<div class="label-page">
@@ -239,6 +239,7 @@
 
 		try {
 			await invoke('print_etiquetas', { labels, heightMm, printerName });
+			cola = [];
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
 			printerModal = { title: 'Error de impresión', body: msg };
@@ -434,9 +435,9 @@
 										         bg-white/20 text-white rounded-full text-[10px] font-bold leading-none">
 										{totalEtiquetas}
 									</span>
-									etiqueta{totalEtiquetas !== 1 ? 's' : ''} en cola
+									etiqueta{totalEtiquetas !== 1 ? 's' : ''} en lista
 								{:else}
-									cola vacía
+									lista vacía
 								{/if}
 							</p>
 						</div>
@@ -487,10 +488,10 @@
 							<rect x="6" y="14" width="12" height="8"/>
 						</svg>
 						<p class="font-barlow-condensed text-[14px] font-bold text-slate-400 tracking-wide uppercase">
-							Cola vacía
+							Lista vacía
 						</p>
 						<p class="text-[11.5px] text-slate-400 text-center leading-relaxed">
-							Selecciona artículos del catálogo<br/>para agregarlos a la lista de impresión
+							Selecciona artículos del catálogo<br/>para agregarlos a la Lista de Impresión
 						</p>
 					</div>
 				{:else}
