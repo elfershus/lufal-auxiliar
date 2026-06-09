@@ -184,3 +184,13 @@ export async function importPairings(
 ): Promise<number> {
 	return invoke('import_pairings', { rows, mode });
 }
+
+// ── IMPRESIÓN ─────────────────────────────────────────────────
+
+export function getDefaultPrinter(): Promise<string | null> {
+	return invoke('get_default_printer');
+}
+
+export function saveDefaultPrinter(printer: string): Promise<void> {
+	return invoke('save_default_printer', { printer });
+}

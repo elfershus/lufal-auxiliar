@@ -185,6 +185,16 @@ fn save_sucursales_map(mapping: Vec<config::SucursalConfig>) -> Result<(), Strin
     AppConfig::update_sucursales(&mapping).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_default_printer() -> Option<String> {
+    AppConfig::load().ok().and_then(|c| c.default_printer)
+}
+
+#[tauri::command]
+fn save_default_printer(printer: String) -> Result<(), String> {
+    AppConfig::update_default_printer(&printer).map_err(|e| e.to_string())
+}
+
 // ── Estadísticas ───────────────────────────────────────────────
 
 fn numalm_to_branch_letter(numalm: &str, cfg: &Option<AppConfig>) -> Option<char> {
@@ -951,6 +961,8 @@ pub fn run() {
             get_inventario_por_mes,
             print::list_printers,
             print::print_etiquetas,
+            get_default_printer,
+            save_default_printer,
         ])
         .run(tauri::generate_context!())
         .expect("Error al iniciar la aplicación Tauri");

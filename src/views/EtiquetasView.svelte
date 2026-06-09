@@ -3,6 +3,7 @@
 	import JsBarcode from 'jsbarcode';
 	import { invoke } from '@tauri-apps/api/core';
 	import { listArticulosEtiqueta } from '../lib/grpc.js';
+	import { getDefaultPrinter } from '../lib/dbf.js';
 	import type { ArticuloEtiqueta } from '../lib/types.js';
 
 	// ── Estado panel izquierdo ─────────────────────────────────
@@ -22,20 +23,21 @@
 	let cola = $state<ItemCola[]>([]);
 	let totalEtiquetas = $derived(cola.reduce((s, i) => s + i.cantidad, 0));
 
-	// ── Impresora seleccionada ─────────────────────────────────
+	// ── Impresora ──────────────────────────────────────────────
 	let printers = $state<string[]>([]);
-	let printerName = $state('Brother QL-800');
-	let printError = $state('');
+	let printerName = $state('');
+	let printerModal = $state<{ title: string; body: string } | null>(null);
 
 	// ── Búsqueda con debounce ──────────────────────────────────
 	onMount(() => {
 		mounted = true;
 		buscar();
-		invoke<string[]>('list_printers').then((list) => {
+		Promise.all([
+			invoke<string[]>('list_printers'),
+			getDefaultPrinter(),
+		]).then(([list, saved]) => {
 			printers = list;
-			if (list.length > 0 && !list.includes(printerName)) {
-				printerName = list[0];
-			}
+			printerName = saved ?? list[0] ?? '';
 		}).catch(() => {});
 	});
 
@@ -144,13 +146,13 @@
 		}
 
 		const numartPx = Math.round((14 * DPI) / 72) * SCALE;
-		ctx.font = `bold ${numartPx}px "Courier New", monospace`;
+		ctx.font = `bold ${numartPx}px Arial, sans-serif`;
 		ctx.fillStyle = 'black';
 		ctx.textAlign = 'center';
 		ctx.fillText(art.numart, W / 2, y);
 		y += numartPx + Math.round((1 * DPI) / 25.4) * SCALE;
 
-		const descPx = Math.round((9 * DPI) / 72) * SCALE;
+		const descPx = Math.round((7 * DPI) / 72) * SCALE;
 		ctx.font = `${descPx}px "Arial Narrow", Arial, sans-serif`;
 		ctx.textAlign = 'left';
 		let desc = art.desc;
@@ -166,7 +168,15 @@
 	}
 
 	async function imprimir() {
-		printError = '';
+		if (!printerName || !printers.includes(printerName)) {
+			printerModal = {
+				title: 'Impresora no disponible',
+				body: printerName
+					? `La impresora "${printerName}" no está instalada en este equipo.`
+					: 'No hay impresora configurada.',
+			};
+			return;
+		}
 		const barcodeOpts = { format: 'CODE128', width: 2, height: 50, displayValue: false, margin: 0 };
 
 		const items = cola.flatMap((item) =>
@@ -192,8 +202,8 @@
 			.label-page { width: 62mm; padding: 3mm; font-family: monospace, sans-serif; }
 			.label-barcode { width: 100%; margin-bottom: 2mm; }
 			.label-barcode svg { width: 100%; height: auto; }
-			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
-			.label-desc { font-size: 9pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
+			.label-numart { font-size: 14pt; font-weight: bold; font-family: Arial, sans-serif; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
+			.label-desc { font-size: 7pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
 
 		const firstItem = rendered[0];
 		const sampleDiv = `<div class="label-page">
@@ -230,7 +240,8 @@
 		try {
 			await invoke('print_etiquetas', { labels, heightMm, printerName });
 		} catch (e) {
-			printError = e instanceof Error ? e.message : String(e);
+			const msg = e instanceof Error ? e.message : String(e);
+			printerModal = { title: 'Error de impresión', body: msg };
 		}
 	}
 </script>
@@ -238,82 +249,24 @@
 <!-- ── Wrapper ───────────────────────────────────────────── -->
 <div class="flex flex-col h-screen overflow-hidden bg-bg">
 
-	<!-- ── Header oscuro estándar ────────────────────────────── -->
-	<div class="bg-[#0f1f38] px-4 pt-5 pb-4 md:px-6 flex-shrink-0">
-		<div class="flex items-center justify-between">
-			<div>
-				<p class="text-[11px] font-semibold tracking-[0.12em] uppercase text-white/40">Inventario</p>
-				<h1 class="font-barlow-condensed text-[22px] font-bold text-white leading-none">Etiquetas</h1>
-			</div>
-
-			<div class="flex items-center gap-2">
-				<!-- Selector de impresora -->
-				{#if printers.length > 0}
-					<select
-						bind:value={printerName}
-						class="bg-white/10 text-white text-[11px] font-mono border border-white/20 rounded-lg
-							   px-2 py-1.5 outline-none focus:border-white/40 max-w-[180px] truncate"
-					>
-						{#each printers as p}
-							<option value={p} class="text-slate-800 bg-white">{p}</option>
-						{/each}
-					</select>
-				{/if}
-
-				{#if cola.length > 0}
-					<button
-						onclick={() => (cola = [])}
-						class="border border-white/20 text-white/70 hover:bg-white/10 active:bg-white/20
-							   px-3 py-1.5 rounded-lg text-[12px] font-medium font-barlow transition-colors"
-					>
-						Limpiar
-					</button>
-					<button
-						onclick={imprimir}
-						class="flex items-center gap-1.5 bg-navy hover:bg-navy-light active:bg-navy-dark
-							   text-white px-3 py-1.5 rounded-lg text-[12px] font-semibold font-barlow transition-colors"
-					>
-						<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-							<polyline points="6 9 6 2 18 2 18 9"/>
-							<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
-							<rect x="6" y="14" width="12" height="8"/>
-						</svg>
-						Imprimir
-						<span class="ml-0.5 bg-white/20 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full leading-none">
-							{totalEtiquetas}
-						</span>
-					</button>
-				{/if}
-			</div>
-
-			<!-- Error de impresión -->
-			{#if printError}
-				<div class="mt-2 text-[10px] text-red-300 bg-red-900/30 border border-red-500/30 rounded px-2 py-1 max-w-xs truncate" title={printError}>
-					{printError}
-				</div>
-			{/if}
-		</div>
-
-	</div>
-	<div class="h-px flex-shrink-0" style="background: linear-gradient(90deg, rgba(255,255,255,0.08) 0%, transparent 100%)"></div>
 
 	<!-- ── Cuerpo: 2 paneles ──────────────────────────────────── -->
-	<div class="flex flex-1 overflow-hidden">
+	<div class="flex flex-1 overflow-hidden bg-[#0f1f38]">
 
 		<!-- ── Panel izquierdo: catálogo ──────────────────────── -->
-		<div class="flex flex-col w-[55%] overflow-hidden bg-surface border-r border-slate-200">
+		<div class="flex flex-col w-[55%] overflow-hidden bg-[#d4dbe8] border-r border-white/10">
 
 			<!-- Header panel -->
-			<div class="px-4 py-3 border-b border-slate-200 flex-shrink-0">
+			<div class="px-4 pt-3 pb-3 border-b border-white/10 flex-shrink-0 bg-[#0f1f38]">
 				<div class="flex items-center gap-2.5 mb-2.5">
-					<div class="w-7 h-7 rounded-lg flex items-center justify-center bg-navy/[0.08] border border-navy/20 text-navy flex-shrink-0">
+					<div class="w-7 h-7 rounded-lg flex items-center justify-center bg-white/10 border border-white/20 text-white flex-shrink-0">
 						<svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round">
 							<path d="M3 5h2M7 5h1M12 5h3M17 5h1M3 10h1M6 10h4M12 10h1M15 10h3M3 15h2M7 15h1M12 15h3M17 15h1M3 19h4M9 19h1M12 19h4M18 19h1"/>
 						</svg>
 					</div>
 					<div>
-						<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400">Catálogo</p>
-						<p class="font-mono text-[11px] text-slate-500 mt-0.5">
+						<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-white/40">Catálogo</p>
+						<p class="font-mono text-[11px] text-white/70 mt-0.5">
 							{#if cargando && articulos.length === 0}
 								cargando…
 							{:else}
@@ -325,7 +278,7 @@
 
 				<!-- Search -->
 				<div class="relative">
-					<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-navy pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 						<circle cx="11" cy="11" r="8"/>
 						<line x1="21" y1="21" x2="16.65" y2="16.65"/>
 					</svg>
@@ -334,10 +287,9 @@
 						placeholder="NUMART, descripción o código de barras…"
 						value={query}
 						oninput={(e) => (query = e.currentTarget.value.toUpperCase())}
-						class="w-full pl-8 pr-8 py-1.5 rounded-lg bg-slate-100 border border-slate-200
-							   text-[12px] text-slate-700 placeholder:text-slate-400 uppercase
-							   focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy/40
-							   focus:bg-white transition-all"
+						class="w-full pl-8 pr-8 py-1.5 rounded-lg bg-white text-slate-800 border border-transparent
+							   text-[12px] placeholder:text-slate-400 uppercase
+							   focus:outline-none focus:ring-2 focus:ring-white/30 transition-all"
 					/>
 					{#if query}
 						<button
@@ -392,13 +344,13 @@
 					</div>
 
 				{:else}
-					<div>
+					<div class="p-2 flex flex-col gap-1.5">
 						{#each articulos as art (art.numart)}
 							<button
 								onclick={() => agregarACola(art)}
-								class="flex items-start gap-2.5 w-full text-left px-4 py-2.5
-									   border-b border-slate-100 border-l-2 border-l-transparent
-									   hover:bg-slate-50 hover:border-l-navy transition-all group"
+								class="flex items-center gap-2.5 w-full text-left px-3 py-2.5
+									   bg-white border border-slate-200 rounded-lg shadow-sm
+									   hover:border-navy/40 hover:bg-navy/[0.03] transition-all group"
 							>
 								<div class="flex-1 min-w-0">
 									<div class="mb-1">
@@ -433,8 +385,8 @@
 										</span>
 									{/if}
 								</div>
-								<div class="flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center
-									        text-slate-400 mt-0.5 group-hover:bg-navy/[0.08] group-hover:text-navy transition-all">
+								<div class="flex-shrink-0 w-6 h-6 rounded-full bg-navy flex items-center justify-center
+									        text-white transition-all group-hover:scale-110">
 									<svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
 										<line x1="12" y1="5" x2="12" y2="19"/>
 										<line x1="5" y1="12" x2="19" y2="12"/>
@@ -448,9 +400,8 @@
 								<button
 									onclick={cargarMas}
 									disabled={cargandoMas}
-									class="px-4 py-1.5 text-[11.5px] text-slate-500 border border-slate-200 rounded-lg
-										   hover:border-slate-300 hover:text-slate-700 hover:bg-slate-50
-										   transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+									class="px-4 py-1.5 text-[11.5px] font-medium bg-navy text-white rounded-lg
+										   hover:bg-[#2a4a8a] active:bg-[#0a1525] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
 								>
 									{cargandoMas ? 'Cargando…' : 'Cargar más artículos'}
 								</button>
@@ -465,10 +416,10 @@
 		<div class="flex flex-col flex-1 overflow-hidden bg-bg">
 
 			<!-- Header panel -->
-			<div class="px-4 py-3 border-b border-slate-200 flex-shrink-0 bg-surface">
-				<div class="flex items-center gap-3">
+			<div class="px-4 py-3 border-b border-white/10 flex-shrink-0 bg-[#0f1f38]">
+				<div class="flex items-center justify-between gap-3">
 					<div class="flex items-center gap-2.5">
-						<div class="w-7 h-7 rounded-lg flex items-center justify-center bg-navy/[0.08] border border-navy/20 text-navy flex-shrink-0">
+						<div class="w-7 h-7 rounded-lg flex items-center justify-center bg-white/10 border border-white/20 text-white flex-shrink-0">
 							<svg class="w-[14px] h-[14px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
 								<polyline points="6 9 6 2 18 2 18 9"/>
 								<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
@@ -476,11 +427,11 @@
 							</svg>
 						</div>
 						<div>
-							<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-slate-400">Impresión</p>
-							<p class="font-mono text-[11px] text-slate-500 mt-0.5 flex items-center gap-1.5">
+							<p class="text-[9px] font-mono font-bold tracking-[0.16em] uppercase text-white/40">Impresión</p>
+							<p class="font-mono text-[11px] text-white/70 mt-0.5 flex items-center gap-1.5">
 								{#if totalEtiquetas > 0}
 									<span class="inline-flex items-center justify-center min-w-[18px] h-[16px] px-1.5
-										         bg-navy text-white rounded-full text-[10px] font-bold leading-none">
+										         bg-white/20 text-white rounded-full text-[10px] font-bold leading-none">
 										{totalEtiquetas}
 									</span>
 									etiqueta{totalEtiquetas !== 1 ? 's' : ''} en cola
@@ -491,7 +442,39 @@
 						</div>
 					</div>
 
+					<!-- Acciones de impresión -->
+					<div class="flex items-center gap-2 flex-shrink-0">
+						{#if cola.length > 0}
+							<button
+								onclick={() => (cola = [])}
+								class="border border-white/20 text-white/70 hover:bg-white/10 active:bg-white/20
+									   px-3 py-1.5 rounded-lg text-[12px] font-medium font-barlow transition-colors"
+							>
+								Limpiar
+							</button>
+							<button
+								onclick={imprimir}
+								class="flex items-center gap-1.5 bg-white hover:bg-white/90 active:bg-white/80
+									   text-navy px-3 py-1.5 rounded-lg text-[12px] font-semibold font-barlow transition-colors"
+							>
+								<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<polyline points="6 9 6 2 18 2 18 9"/>
+									<path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+									<rect x="6" y="14" width="12" height="8"/>
+								</svg>
+								Imprimir
+								<span class="ml-0.5 bg-navy/10 text-navy text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full leading-none">
+									{totalEtiquetas}
+								</span>
+							</button>
+						{/if}
 					</div>
+				</div>
+				<!-- replica el buscador del panel izquierdo para igualar la altura del header -->
+				<div class="mt-2.5" aria-hidden="true">
+					<div class="w-full pl-8 pr-8 py-1.5 text-[12px] border border-transparent invisible">phantom</div>
+				</div>
+
 			</div>
 
 			<!-- Cola -->
@@ -526,6 +509,17 @@
 									</p>
 									{#if item.articulo.codigo}
 										<p class="font-mono text-[9.5px] text-slate-400 mt-0.5">{item.articulo.codigo}</p>
+									{:else}
+										<span class="inline-flex items-center gap-1 font-mono text-[9.5px] font-semibold
+											         text-red-500 bg-red-50 border border-red-200
+											         px-1.5 py-0.5 rounded leading-none mt-0.5">
+											<svg class="w-[9px] h-[9px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+												<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+												<line x1="12" y1="9" x2="12" y2="13"/>
+												<line x1="12" y1="17" x2="12.01" y2="17"/>
+											</svg>
+											Sin código de barras
+										</span>
 									{/if}
 								</div>
 
@@ -573,6 +567,35 @@
 		</div>
 	</div>
 </div>
+
+<!-- Modal: error de impresora -->
+{#if printerModal}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+		<div class="bg-white rounded-2xl shadow-xl w-[360px] p-6 flex flex-col gap-4">
+			<div class="flex items-start gap-3">
+				<div class="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
+					<svg class="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<circle cx="12" cy="12" r="10"/>
+						<line x1="12" y1="8" x2="12" y2="12"/>
+						<line x1="12" y1="16" x2="12.01" y2="16"/>
+					</svg>
+				</div>
+				<div class="min-w-0">
+					<h3 class="font-barlow-condensed text-[16px] font-bold text-slate-800 leading-none mb-1">{printerModal.title}</h3>
+					<p class="text-[12px] text-slate-500 leading-relaxed break-words">{printerModal.body}</p>
+					{#if printerModal.title === 'Impresora no disponible'}
+						<p class="text-[11px] text-slate-400 mt-1">Configúrala en <strong class="text-slate-500">Configuración → Impresión</strong>.</p>
+					{/if}
+				</div>
+			</div>
+			<button
+				onclick={() => (printerModal = null)}
+				class="w-full bg-navy text-white rounded-xl py-2 text-[13px] font-semibold font-barlow
+					   hover:opacity-90 transition-opacity"
+			>Entendido</button>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.qty-input::-webkit-inner-spin-button,

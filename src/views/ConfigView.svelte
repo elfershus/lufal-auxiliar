@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { listAlmacenes } from '../lib/grpc.js';
-	import { getSucursalesConfig, saveSucursalDbfPath, saveDefaultNumalm, saveSucursalesMap } from '../lib/dbf.js';
+	import { getSucursalesConfig, saveSucursalDbfPath, saveDefaultNumalm, saveSucursalesMap, getDefaultPrinter, saveDefaultPrinter } from '../lib/dbf.js';
+	import { invoke } from '@tauri-apps/api/core';
 	import { appConfig } from '../lib/config.svelte.js';
 	import { auth } from '../lib/auth.svelte.js';
 	import LoginGate from '../components/LoginGate.svelte';
@@ -20,6 +21,12 @@
 	let savingDbfFor = $state<string | null>(null);
 	let dbfError = $state('');
 
+	// ── Impresora
+	let printers = $state<string[]>([]);
+	let selectedPrinter = $state('');
+	let savingPrinter = $state(false);
+	let printerError = $state('');
+
 	$effect(() => {
 		if (auth.unlocked) {
 			cargar();
@@ -30,7 +37,14 @@
 		cargando = true;
 		errorMsg = '';
 		try {
-			const [alms, cfg] = await Promise.all([listAlmacenes(), getSucursalesConfig()]);
+			const [alms, cfg, printerList, savedPrinter] = await Promise.all([
+				listAlmacenes(),
+				getSucursalesConfig(),
+				invoke<string[]>('list_printers'),
+				getDefaultPrinter(),
+			]);
+			printers = printerList;
+			selectedPrinter = savedPrinter ?? '';
 			almacenes = alms;
 			sucursalesConfig = cfg;
 
@@ -67,6 +81,19 @@
 			dbfError = e instanceof Error ? e.message : String(e);
 		} finally {
 			savingDbfFor = null;
+		}
+	}
+
+	async function setPrinter(printer: string) {
+		printerError = '';
+		savingPrinter = true;
+		try {
+			await saveDefaultPrinter(printer);
+			selectedPrinter = printer;
+		} catch (e) {
+			printerError = e instanceof Error ? e.message : String(e);
+		} finally {
+			savingPrinter = false;
 		}
 	}
 
@@ -202,6 +229,62 @@
 						<p class="text-[11px] text-slate-400 mt-2">
 							Predeterminado: <span class="font-mono font-semibold text-slate-600">{sucursalesConfig.default_numalm}</span>
 							— {almacenes.find((a) => a.numalm === sucursalesConfig.default_numalm)?.nomalm ?? ''}
+						</p>
+					{/if}
+				{/if}
+			</div>
+
+			<!-- Impresión -->
+			<div class="bg-surface rounded-card p-5 shadow-card animate-fadeSlide mt-4">
+				<h2 class="text-[11px] font-semibold tracking-[0.1em] uppercase text-slate-400 mb-1">
+					Impresión
+				</h2>
+				<p class="text-[11px] text-slate-400 mb-4">
+					Impresora predeterminada para etiquetas.
+				</p>
+
+				{#if printerError}
+					<p class="text-[12px] text-red-500 mb-3">{printerError}</p>
+				{/if}
+
+				{#if cargando}
+					<div class="h-9 rounded-lg animate-shimmer"
+						style="background: linear-gradient(90deg, #e2e8f0 25%, #f0f4f8 50%, #e2e8f0 75%); background-size: 400% 100%">
+					</div>
+				{:else if printers.length === 0}
+					<p class="text-[12px] text-slate-400 italic">No se encontraron impresoras instaladas.</p>
+				{:else}
+					<div class="border border-slate-200 rounded-lg overflow-hidden">
+						{#each printers as printer, i (printer)}
+							{@const isSelected = selectedPrinter === printer}
+							<button
+								onclick={() => setPrinter(printer)}
+								disabled={savingPrinter}
+								class="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors
+									{i > 0 ? 'border-t border-slate-100' : ''}
+									{isSelected ? 'bg-navy/5' : 'hover:bg-bg'}
+									disabled:opacity-40"
+							>
+								<div class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
+									{isSelected ? 'border-navy bg-navy' : 'border-slate-300'}">
+									{#if isSelected}
+										<div class="w-1.5 h-1.5 rounded-full bg-white"></div>
+									{/if}
+								</div>
+								<span class="text-[12px] {isSelected ? 'text-slate-800 font-semibold' : 'text-slate-600'} truncate">
+									{printer}
+								</span>
+								{#if savingPrinter && isSelected}
+									<svg class="w-3 h-3 animate-spin-fast text-slate-400 ml-auto shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+										<path d="M21 12a9 9 0 11-6.219-8.56" />
+									</svg>
+								{/if}
+							</button>
+						{/each}
+					</div>
+					{#if selectedPrinter}
+						<p class="text-[11px] text-slate-400 mt-2">
+							Predeterminada: <span class="font-mono font-semibold text-slate-600">{selectedPrinter}</span>
 						</p>
 					{/if}
 				{/if}
