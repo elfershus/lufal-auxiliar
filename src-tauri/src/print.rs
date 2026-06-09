@@ -92,7 +92,9 @@ for ($i = 0; $i -lt {count}; $i++) {{\n\
     $ref = $img\n\
     $doc.add_PrintPage({{\n\
         param($s, $e)\n\
-        $e.Graphics.DrawImage($ref, 0, 0, $e.PageBounds.Width, $e.PageBounds.Height)\n\
+        $e.Graphics.TranslateTransform($e.PageBounds.Width, 0)\n\
+        $e.Graphics.RotateTransform(90)\n\
+        $e.Graphics.DrawImage($ref, 0, 0, $e.PageBounds.Height, $e.PageBounds.Width)\n\
         $e.HasMorePages = $false\n\
     }})\n\
     $doc.Print()\n\
