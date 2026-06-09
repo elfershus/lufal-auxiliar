@@ -1,41 +1,19 @@
 use base64::prelude::*;
 use serde::Deserialize;
-use std::process::Command;
 
 #[derive(Deserialize)]
 pub struct PngLabel {
     pub png_b64: String,
 }
 
-/// Lista las impresoras instaladas usando PowerShell Get-Printer.
 #[tauri::command]
 pub fn list_printers() -> Vec<String> {
+    #[cfg(windows)]
+    return imp::list_printers();
     #[cfg(not(windows))]
     return vec![];
-
-    #[cfg(windows)]
-    {
-        let Ok(out) = Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                // @() fuerza array JSON incluso con un solo elemento
-                "@(Get-Printer | Select-Object -ExpandProperty Name) | ConvertTo-Json -Compress",
-            ])
-            .output()
-        else {
-            return vec![];
-        };
-
-        let stdout = String::from_utf8_lossy(&out.stdout);
-        serde_json::from_str(stdout.trim()).unwrap_or_default()
-    }
 }
 
-/// Imprime etiquetas PNG en la impresora indicada usando
-/// System.Drawing.Printing de .NET Framework vía PowerShell.
-/// No contiene ningún bloque unsafe.
 #[tauri::command]
 pub fn print_etiquetas(
     labels: Vec<PngLabel>,
@@ -45,98 +23,238 @@ pub fn print_etiquetas(
     if labels.is_empty() {
         return Ok(());
     }
-
+    #[cfg(windows)]
+    return imp::print_labels(labels, height_mm, printer_name);
     #[cfg(not(windows))]
     return Err("Impresión directa solo disponible en Windows".to_string());
+}
 
-    #[cfg(windows)]
-    {
-        // ── Guardar PNGs en directorio temporal ───────────────────
-        let temp_dir = std::env::temp_dir().join("lufal_etiquetas");
-        std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+#[cfg(windows)]
+mod imp {
+    use super::*;
+    use std::mem;
+    use windows::{
+        core::PCWSTR,
+        Win32::{
+            Foundation::{HANDLE, HWND},
+            Graphics::{
+                Gdi::{
+                    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateDCW, DeleteDC,
+                    DEVMODE_FIELD_FLAGS, DEVMODEW, DIB_RGB_COLORS, GetDeviceCaps,
+                    HDC, HORZRES, RGBQUAD, SRCCOPY, StretchDIBits, VERTRES,
+                },
+                Printing::{
+                    ClosePrinter, DocumentPropertiesW, EnumPrintersW,
+                    OpenPrinterW, PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL,
+                    PRINTER_INFO_2W,
+                },
+            },
+            Storage::Xps::{DOCINFOW, EndDoc, EndPage, StartDocW, StartPage},
+        },
+    };
 
-        let count = labels.len();
-        for (i, label) in labels.iter().enumerate() {
-            let bytes = BASE64_STANDARD
-                .decode(&label.png_b64)
-                .map_err(|e| format!("base64 label {i}: {e}"))?;
-            std::fs::write(temp_dir.join(format!("label_{i}.png")), bytes)
-                .map_err(|e| e.to_string())?;
+    const DM_PAPERSIZE:   DEVMODE_FIELD_FLAGS = DEVMODE_FIELD_FLAGS(0x0000_0002);
+    const DM_PAPERLENGTH: DEVMODE_FIELD_FLAGS = DEVMODE_FIELD_FLAGS(0x0000_0004);
+    const DM_PAPERWIDTH:  DEVMODE_FIELD_FLAGS = DEVMODE_FIELD_FLAGS(0x0000_0008);
+    const DMPAPER_USER:   i16 = 256;
+
+    pub fn list_printers() -> Vec<String> {
+        unsafe {
+            let flags = PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS;
+            let mut needed: u32 = 0;
+            let mut count: u32 = 0;
+
+            // Primera llamada: tamaño de buffer necesario
+            let _ = EnumPrintersW(flags, PCWSTR::null(), 2, None, &mut needed, &mut count);
+            if needed == 0 {
+                return vec![];
+            }
+
+            let mut buf = vec![0u8; needed as usize];
+            if EnumPrintersW(
+                flags,
+                PCWSTR::null(),
+                2,
+                Some(&mut buf),
+                &mut needed,
+                &mut count,
+            )
+            .is_err()
+                || count == 0
+            {
+                return vec![];
+            }
+
+            std::slice::from_raw_parts(buf.as_ptr() as *const PRINTER_INFO_2W, count as usize)
+                .iter()
+                .filter_map(|p| p.pPrinterName.to_string().ok())
+                .collect()
+        }
+    }
+
+    pub fn print_labels(
+        labels: Vec<PngLabel>,
+        height_mm: f32,
+        printer_name: String,
+    ) -> Result<(), String> {
+        // Decodificar todo antes de abrir el DC (fail-fast)
+        let pngs: Vec<Vec<u8>> = labels
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                BASE64_STANDARD
+                    .decode(&l.png_b64)
+                    .map_err(|e| format!("base64 etiqueta {i}: {e}"))
+            })
+            .collect::<Result<_, _>>()?;
+
+        let printer_w: Vec<u16> = printer_name.encode_utf16().chain(Some(0)).collect();
+        let pcw = PCWSTR::from_raw(printer_w.as_ptr());
+
+        // Dimensiones en décimas de mm: ancho del rollo (62 mm) y longitud de la etiqueta
+        let paper_w = 620_i16;                                 // 62 mm — ancho del rollo
+        let paper_h = (height_mm * 10.0).round() as i16;      // longitud variable
+
+        let dm_buf = build_devmode(pcw, paper_w, paper_h)?;
+
+        let hdc = unsafe {
+            CreateDCW(
+                PCWSTR::null(),
+                pcw,
+                PCWSTR::null(),
+                Some(dm_buf.as_ptr() as *const DEVMODEW),
+            )
+        };
+        if hdc == HDC(std::ptr::null_mut()) {
+            return Err("CreateDCW falló — impresora no disponible".to_string());
         }
 
-        // ── Generar script PowerShell ─────────────────────────────
-        // PaperSize(width, height) en centésimos de pulgada.
-        // En impresoras de etiquetas en rollo (Brother QL), el driver interpreta
-        // Width como la dimensión de avance del papel (longitud variable de la
-        // etiqueta) y Height como el ancho del rollo (62 mm fijo).
-        let paper_w = (height_mm / 25.4 * 100.0).round() as i32; // longitud etiqueta
-        let paper_h = (62.0_f32 / 25.4 * 100.0).round() as i32;  // ancho rollo = 62 mm
+        let result = do_print(hdc, &pngs);
+        unsafe { let _ = DeleteDC(hdc); };
+        result
+    }
 
-        // Escapar comillas simples para strings PS
-        let printer_ps = printer_name.replace('\'', "''");
-        let dir_ps = temp_dir.to_string_lossy().replace('\'', "''");
+    // Obtiene el DEVMODE del driver y le aplica el tamaño de papel personalizado.
+    fn build_devmode(pcw: PCWSTR, paper_w: i16, paper_h: i16) -> Result<Vec<u8>, String> {
+        unsafe {
+            let mut hprinter = HANDLE::default();
+            OpenPrinterW(pcw, &mut hprinter, None)
+                .map_err(|e| format!("OpenPrinterW: {e}"))?;
 
-        // Nota: {{ y }} son literales { y } en format!
-        let script = format!(
-            "Add-Type -AssemblyName System.Drawing\n\
-$printer = '{printer}'\n\
-$pw = {w}\n\
-$ph = {h}\n\
-for ($i = 0; $i -lt {count}; $i++) {{\n\
-    $path = '{dir}\\label_' + $i + '.png'\n\
-    $img  = [System.Drawing.Bitmap]::FromFile($path)\n\
-    $doc  = New-Object System.Drawing.Printing.PrintDocument\n\
-    $doc.PrinterSettings.PrinterName    = $printer\n\
-    $doc.DefaultPageSettings.PaperSize = New-Object System.Drawing.Printing.PaperSize('Custom', $pw, $ph)\n\
-    $doc.DefaultPageSettings.Margins   = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)\n\
-    $ref = $img\n\
-    $doc.add_PrintPage({{\n\
-        param($s, $e)\n\
-        $e.Graphics.TranslateTransform($e.PageBounds.Width, 0)\n\
-        $e.Graphics.RotateTransform(90)\n\
-        $e.Graphics.DrawImage($ref, 0, 0, $e.PageBounds.Height, $e.PageBounds.Width)\n\
-        $e.HasMorePages = $false\n\
-    }})\n\
-    $doc.Print()\n\
-    $doc.Dispose()\n\
-    $img.Dispose()\n\
-}}\n",
-            printer = printer_ps,
-            w = paper_w,
-            h = paper_h,
-            count = count,
-            dir = dir_ps,
-        );
+            // fmode = 0 → devuelve el tamaño requerido del buffer
+            let needed =
+                DocumentPropertiesW(HWND::default(), hprinter, pcw, None, None, 0);
+            if needed < 0 {
+                let _ = ClosePrinter(hprinter);
+                return Err("DocumentPropertiesW: no se pudo obtener tamaño".to_string());
+            }
 
-        let script_path = temp_dir.join("print_labels.ps1");
-        std::fs::write(&script_path, &script).map_err(|e| e.to_string())?;
+            let mut buf = vec![0u8; needed as usize];
+            // DM_OUT_BUFFER = 2
+            let rc = DocumentPropertiesW(
+                HWND::default(),
+                hprinter,
+                pcw,
+                Some(buf.as_mut_ptr() as *mut DEVMODEW),
+                None,
+                2,
+            );
+            let _ = ClosePrinter(hprinter);
 
-        // ── Ejecutar script ───────────────────────────────────────
-        let out = Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                &script_path.to_string_lossy(),
-            ])
-            .output()
+            if rc != 1 {
+                return Err(format!("DocumentPropertiesW: error {rc}"));
+            }
+
+            let dm = &mut *(buf.as_mut_ptr() as *mut DEVMODEW);
+            dm.dmFields |= DM_PAPERSIZE | DM_PAPERLENGTH | DM_PAPERWIDTH;
+            dm.Anonymous1.Anonymous1.dmPaperSize   = DMPAPER_USER;
+            dm.Anonymous1.Anonymous1.dmPaperWidth  = paper_w;
+            dm.Anonymous1.Anonymous1.dmPaperLength = paper_h;
+
+            Ok(buf)
+        }
+    }
+
+    fn do_print(hdc: HDC, pngs: &[Vec<u8>]) -> Result<(), String> {
+        let name_w: Vec<u16> = "Etiquetas".encode_utf16().chain(Some(0)).collect();
+        let docinfo = DOCINFOW {
+            cbSize: mem::size_of::<DOCINFOW>() as i32,
+            lpszDocName: PCWSTR::from_raw(name_w.as_ptr()),
+            lpszOutput: PCWSTR::null(),
+            lpszDatatype: PCWSTR::null(),
+            fwType: 0,
+        };
+
+        unsafe {
+            if StartDocW(hdc, &docinfo) <= 0 {
+                return Err("StartDocW falló".to_string());
+            }
+        }
+
+        for (i, png) in pngs.iter().enumerate() {
+            if let Err(e) = print_page(hdc, png) {
+                unsafe { EndDoc(hdc) };
+                return Err(format!("Página {i}: {e}"));
+            }
+        }
+
+        unsafe { EndDoc(hdc) };
+        Ok(())
+    }
+
+    fn print_page(hdc: HDC, png: &[u8]) -> Result<(), String> {
+        use image::ImageReader;
+        use std::io::Cursor;
+
+        let img = ImageReader::new(Cursor::new(png))
+            .with_guessed_format()
+            .map_err(|e| e.to_string())?
+            .decode()
             .map_err(|e| e.to_string())?;
 
-        // ── Limpiar temporales ────────────────────────────────────
-        for i in 0..count {
-            let _ = std::fs::remove_file(temp_dir.join(format!("label_{i}.png")));
-        }
-        let _ = std::fs::remove_file(&script_path);
+        let rgba = img.to_rgba8();
+        let (w, h) = rgba.dimensions();
 
-        if !out.status.success() {
-            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            return Err(if stderr.is_empty() {
-                format!("PowerShell terminó con código {:?}", out.status.code())
-            } else {
-                stderr
-            });
+        // RGBA → BGRA (orden de bytes de DIB en Win32)
+        let mut bgra: Vec<u8> = Vec::with_capacity((w * h * 4) as usize);
+        for px in rgba.pixels() {
+            bgra.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+        }
+
+        // Dimensiones de página en píxeles del dispositivo
+        let page_w = unsafe { GetDeviceCaps(hdc, HORZRES) };
+        let page_h = unsafe { GetDeviceCaps(hdc, VERTRES) };
+
+        // biHeight negativo = DIB top-down (sin necesidad de invertir filas)
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize:          mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth:         w as i32,
+                biHeight:        -(h as i32),
+                biPlanes:        1,
+                biBitCount:      32,
+                biCompression:   BI_RGB.0,
+                biSizeImage:     0,
+                biXPelsPerMeter: 0,
+                biYPelsPerMeter: 0,
+                biClrUsed:       0,
+                biClrImportant:  0,
+            },
+            bmiColors: [RGBQUAD::default()],
+        };
+
+        unsafe {
+            StartPage(hdc);
+            StretchDIBits(
+                hdc,
+                0, 0, page_w, page_h,          // destino: página completa
+                0, 0, w as i32, h as i32,       // fuente: imagen completa
+                Some(bgra.as_ptr() as *const _),
+                &bmi,
+                DIB_RGB_COLORS,
+                SRCCOPY,
+            );
+            EndPage(hdc);
         }
 
         Ok(())
