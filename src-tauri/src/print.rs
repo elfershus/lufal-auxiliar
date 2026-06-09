@@ -65,9 +65,12 @@ pub fn print_etiquetas(
         }
 
         // ── Generar script PowerShell ─────────────────────────────
-        // Dimensiones en centésimos de pulgada (unidad de PaperSize)
-        let paper_w = (62.0_f32 / 25.4 * 100.0).round() as i32; // 62 mm
-        let paper_h = (height_mm / 25.4 * 100.0).round() as i32;
+        // PaperSize(width, height) en centésimos de pulgada.
+        // En impresoras de etiquetas en rollo (Brother QL), el driver interpreta
+        // Width como la dimensión de avance del papel (longitud variable de la
+        // etiqueta) y Height como el ancho del rollo (62 mm fijo).
+        let paper_w = (height_mm / 25.4 * 100.0).round() as i32; // longitud etiqueta
+        let paper_h = (62.0_f32 / 25.4 * 100.0).round() as i32;  // ancho rollo = 62 mm
 
         // Escapar comillas simples para strings PS
         let printer_ps = printer_name.replace('\'', "''");
