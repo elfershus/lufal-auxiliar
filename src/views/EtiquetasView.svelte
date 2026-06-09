@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import JsBarcode from 'jsbarcode';
+	import { invoke } from '@tauri-apps/api/core';
 	import { listArticulosEtiqueta } from '../lib/grpc.js';
 	import type { ArticuloEtiqueta } from '../lib/types.js';
 
@@ -21,10 +22,21 @@
 	let cola = $state<ItemCola[]>([]);
 	let totalEtiquetas = $derived(cola.reduce((s, i) => s + i.cantidad, 0));
 
+	// ── Impresora seleccionada ─────────────────────────────────
+	let printers = $state<string[]>([]);
+	let printerName = $state('Brother QL-800');
+	let printError = $state('');
+
 	// ── Búsqueda con debounce ──────────────────────────────────
 	onMount(() => {
 		mounted = true;
 		buscar();
+		invoke<string[]>('list_printers').then((list) => {
+			printers = list;
+			if (list.length > 0 && !list.includes(printerName)) {
+				printerName = list[0];
+			}
+		}).catch(() => {});
 	});
 
 	$effect(() => {
@@ -93,23 +105,76 @@
 		return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 	}
 
-	function imprimir() {
-		const barcodeOpts = { format: 'CODE128', width: 2, height: 50, displayValue: false, margin: 0 };
+	async function renderLabelToCanvas(
+		art: ArticuloEtiqueta,
+		barcodeSvg: string | null,
+		heightMm: number
+	): Promise<string> {
+		const DPI = 96;
+		const SCALE = 4; // ~384 DPI efectivo — buena calidad al escalar a 300 DPI del driver
+		const W = Math.round((62 * DPI) / 25.4) * SCALE;
+		const H = Math.round((heightMm * DPI) / 25.4) * SCALE;
+		const pad = Math.round((3 * DPI) / 25.4) * SCALE;
+		const innerW = W - 2 * pad;
 
-		const css = `* { box-sizing: border-box; margin: 0; padding: 0; }
-			@page { size: 62mm auto; margin: 3mm; }
-			.label-page { page-break-after: always; break-after: page; width: 56mm; padding: 2mm; font-family: monospace, sans-serif; }
-			.label-barcode { width: 100%; margin-bottom: 2mm; }
-			.label-barcode svg { width: 100%; height: auto; }
-			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
-			.label-desc { font-size: 9pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
+		const canvas = document.createElement('canvas');
+		canvas.width = W;
+		canvas.height = H;
+		const ctx = canvas.getContext('2d')!;
+		ctx.textBaseline = 'top';
+
+		ctx.fillStyle = 'white';
+		ctx.fillRect(0, 0, W, H);
+
+		let y = pad;
+
+		if (barcodeSvg) {
+			const img = new Image();
+			const blob = new Blob([barcodeSvg], { type: 'image/svg+xml' });
+			const url = URL.createObjectURL(blob);
+			await new Promise<void>((res) => {
+				img.onload = () => res();
+				img.onerror = () => res();
+				img.src = url;
+			});
+			const barcodeH = Math.round((14 * DPI) / 25.4) * SCALE;
+			ctx.drawImage(img, pad, y, innerW, barcodeH);
+			URL.revokeObjectURL(url);
+			y += barcodeH + Math.round((2 * DPI) / 25.4) * SCALE;
+		}
+
+		const numartPx = Math.round((14 * DPI) / 72) * SCALE;
+		ctx.font = `bold ${numartPx}px "Courier New", monospace`;
+		ctx.fillStyle = 'black';
+		ctx.textAlign = 'center';
+		ctx.fillText(art.numart, W / 2, y);
+		y += numartPx + Math.round((1 * DPI) / 25.4) * SCALE;
+
+		const descPx = Math.round((9 * DPI) / 72) * SCALE;
+		ctx.font = `${descPx}px "Arial Narrow", Arial, sans-serif`;
+		ctx.textAlign = 'left';
+		let desc = art.desc;
+		if (ctx.measureText(desc).width > innerW) {
+			while (desc.length > 0 && ctx.measureText(desc + '…').width > innerW) {
+				desc = desc.slice(0, -1);
+			}
+			desc += '…';
+		}
+		ctx.fillText(desc, pad, y);
+
+		return canvas.toDataURL('image/png').split(',')[1];
+	}
+
+	async function imprimir() {
+		printError = '';
+		const barcodeOpts = { format: 'CODE128', width: 2, height: 50, displayValue: false, margin: 0 };
 
 		const items = cola.flatMap((item) =>
 			Array.from({ length: item.cantidad }, () => item.articulo)
 		);
 
-		const labels = items.map((art) => {
-			let barcodeSvg = '';
+		const rendered = items.map((art) => {
+			let barcodeSvg: string | null = null;
 			if (art.codigo) {
 				const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 				try {
@@ -119,26 +184,54 @@
 					// código inválido para Code128
 				}
 			}
-			return `<div class="label-page">
-				${barcodeSvg ? `<div class="label-barcode">${barcodeSvg}</div>` : ''}
-				<div class="label-numart">${escapeHtml(art.numart)}</div>
-				<div class="label-desc">${escapeHtml(art.desc)}</div>
-			</div>`;
+			return { art, barcodeSvg };
 		});
 
-		const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${labels.join('')}</body></html>`;
+		// Medir altura real del layout en un iframe oculto
+		const baseCss = `* { box-sizing: border-box; margin: 0; padding: 0; }
+			.label-page { width: 62mm; padding: 3mm; font-family: monospace, sans-serif; }
+			.label-barcode { width: 100%; margin-bottom: 2mm; }
+			.label-barcode svg { width: 100%; height: auto; }
+			.label-numart { font-size: 14pt; font-weight: bold; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
+			.label-desc { font-size: 9pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
+
+		const firstItem = rendered[0];
+		const sampleDiv = `<div class="label-page">
+			${firstItem.barcodeSvg ? `<div class="label-barcode">${firstItem.barcodeSvg}</div>` : ''}
+			<div class="label-numart">${escapeHtml(firstItem.art.numart)}</div>
+			<div class="label-desc">${escapeHtml(firstItem.art.desc)}</div>
+		</div>`;
+		const measureHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${baseCss}</style></head><body>${sampleDiv}</body></html>`;
 
 		const iframe = document.createElement('iframe');
-		iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;top:0;left:0;';
+		iframe.style.cssText = 'position:fixed;width:62mm;top:-9999px;left:0;border:0;visibility:hidden;';
 		document.body.appendChild(iframe);
 
 		const doc = iframe.contentDocument!;
 		doc.open();
-		doc.write(html);
+		doc.write(measureHtml);
 		doc.close();
 
-		iframe.contentWindow!.print();
-		setTimeout(() => document.body.removeChild(iframe), 2000);
+		await new Promise<void>((r) => setTimeout(r, 80));
+
+		const labelEl = doc.querySelector('.label-page') as HTMLElement | null;
+		const heightPx = labelEl ? labelEl.offsetHeight : doc.body.scrollHeight;
+		const heightMm = Math.ceil(heightPx * 25.4 / 96);
+
+		document.body.removeChild(iframe);
+
+		// Renderizar cada etiqueta en canvas (calidad ~384 DPI) y enviar PNGs a Rust/GDI
+		const labels = await Promise.all(
+			rendered.map(({ art, barcodeSvg }) =>
+				renderLabelToCanvas(art, barcodeSvg, heightMm).then((b) => ({ png_b64: b }))
+			)
+		);
+
+		try {
+			await invoke('print_etiquetas', { labels, heightMm, printerName });
+		} catch (e) {
+			printError = e instanceof Error ? e.message : String(e);
+		}
 	}
 </script>
 
@@ -153,8 +246,21 @@
 				<h1 class="font-barlow-condensed text-[22px] font-bold text-white leading-none">Etiquetas</h1>
 			</div>
 
-			{#if cola.length > 0}
-				<div class="flex items-center gap-2">
+			<div class="flex items-center gap-2">
+				<!-- Selector de impresora -->
+				{#if printers.length > 0}
+					<select
+						bind:value={printerName}
+						class="bg-white/10 text-white text-[11px] font-mono border border-white/20 rounded-lg
+							   px-2 py-1.5 outline-none focus:border-white/40 max-w-[180px] truncate"
+					>
+						{#each printers as p}
+							<option value={p} class="text-slate-800 bg-white">{p}</option>
+						{/each}
+					</select>
+				{/if}
+
+				{#if cola.length > 0}
 					<button
 						onclick={() => (cola = [])}
 						class="border border-white/20 text-white/70 hover:bg-white/10 active:bg-white/20
@@ -177,6 +283,13 @@
 							{totalEtiquetas}
 						</span>
 					</button>
+				{/if}
+			</div>
+
+			<!-- Error de impresión -->
+			{#if printError}
+				<div class="mt-2 text-[10px] text-red-300 bg-red-900/30 border border-red-500/30 rounded px-2 py-1 max-w-xs truncate" title={printError}>
+					{printError}
 				</div>
 			{/if}
 		</div>

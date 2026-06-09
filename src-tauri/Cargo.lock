@@ -2074,6 +2074,7 @@ name = "lufal-auxiliar-desktop"
 version = "0.2.1"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "calamine",
  "chrono",
  "dirs 5.0.1",

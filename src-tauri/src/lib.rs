@@ -3,6 +3,7 @@ mod db;
 mod dbf_reader;
 mod grpc;
 mod models;
+mod print;
 mod types;
 mod xlsx;
 
@@ -948,6 +949,8 @@ pub fn run() {
             save_sucursales_map,
             list_minv_por_articulo,
             get_inventario_por_mes,
+            print::list_printers,
+            print::print_etiquetas,
         ])
         .run(tauri::generate_context!())
         .expect("Error al iniciar la aplicación Tauri");
