@@ -152,7 +152,8 @@ impl AppConfig {
 
         if let Some(dp) = default_printer {
             if !dp.is_empty() {
-                content.push_str(&format!("default_printer = \"{}\"\n", dp));
+                let escaped = dp.replace('\\', "\\\\");
+                content.push_str(&format!("default_printer = \"{}\"\n", escaped));
             }
         }
 
