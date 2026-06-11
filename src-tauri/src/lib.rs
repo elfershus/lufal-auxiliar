@@ -195,6 +195,16 @@ fn save_default_printer(printer: String) -> Result<(), String> {
     AppConfig::update_default_printer(&printer).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn get_printer_type() -> Option<String> {
+    AppConfig::load().ok().and_then(|c| c.printer_type)
+}
+
+#[tauri::command]
+fn save_printer_type(printer_type: String) -> Result<(), String> {
+    AppConfig::update_printer_type(&printer_type).map_err(|e| e.to_string())
+}
+
 // ── Estadísticas ───────────────────────────────────────────────
 
 fn numalm_to_branch_letter(numalm: &str, cfg: &Option<AppConfig>) -> Option<char> {
@@ -966,6 +976,8 @@ pub fn run() {
             print::print_etiquetas,
             get_default_printer,
             save_default_printer,
+            get_printer_type,
+            save_printer_type,
         ])
         .run(tauri::generate_context!())
         .expect("Error al iniciar la aplicación Tauri");

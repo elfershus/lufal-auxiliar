@@ -2,7 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { listAlmacenes } from '../lib/grpc.js';
-	import { getSucursalesConfig, saveSucursalDbfPath, saveDefaultNumalm, saveSucursalesMap, getDefaultPrinter, saveDefaultPrinter } from '../lib/dbf.js';
+	import { getSucursalesConfig, saveSucursalDbfPath, saveDefaultNumalm, saveSucursalesMap, getDefaultPrinter, saveDefaultPrinter, getPrinterType, savePrinterType } from '../lib/dbf.js';
 	import { invoke } from '@tauri-apps/api/core';
 	import { appConfig } from '../lib/config.svelte.js';
 	import { auth } from '../lib/auth.svelte.js';
@@ -27,6 +27,8 @@
 	let selectedPrinter = $state('');
 	let savingPrinter = $state(false);
 	let printerError = $state('');
+	let printerType = $state('62mm');
+	let savingType = $state(false);
 
 	$effect(() => {
 		if (auth.unlocked) {
@@ -38,14 +40,16 @@
 		cargando = true;
 		errorMsg = '';
 		try {
-			const [alms, cfg, printerList, savedPrinter] = await Promise.all([
+			const [alms, cfg, printerList, savedPrinter, savedType] = await Promise.all([
 				listAlmacenes(),
 				getSucursalesConfig(),
 				invoke<string[]>('list_printers'),
 				getDefaultPrinter(),
+				getPrinterType(),
 			]);
 			printers = printerList;
 			selectedPrinter = savedPrinter ?? '';
+			printerType = savedType ?? '62mm';
 			almacenes = alms;
 			sucursalesConfig = cfg;
 
@@ -95,6 +99,18 @@
 			printerError = e instanceof Error ? e.message : String(e);
 		} finally {
 			savingPrinter = false;
+		}
+	}
+
+	async function setType(type: string) {
+		printerType = type;
+		savingType = true;
+		try {
+			await savePrinterType(type);
+		} catch {
+			// silencio — la selección visual ya se aplicó
+		} finally {
+			savingType = false;
 		}
 	}
 
@@ -291,6 +307,47 @@
 						</p>
 					{/if}
 				{/if}
+
+				<!-- Formato de papel -->
+				<div class="mt-5 pt-4 border-t border-slate-100">
+					<p class="text-[11px] font-semibold tracking-[0.08em] uppercase text-slate-400 mb-1">
+						Formato de papel
+					</p>
+					<p class="text-[11px] text-slate-400 mb-3">
+						Tipo de rollo o etiqueta instalado en la impresora.
+					</p>
+					<div class="border border-slate-200 rounded-lg overflow-hidden">
+						{#each [
+							{ value: '62mm',  label: '62 mm — cinta continua' },
+							{ value: '29mm',  label: '29 mm × 90.3 mm' },
+						] as opt, i (opt.value)}
+							{@const isSelected = printerType === opt.value}
+							<button
+								onclick={() => setType(opt.value)}
+								disabled={savingType}
+								class="w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors
+									{i > 0 ? 'border-t border-slate-100' : ''}
+									{isSelected ? 'bg-navy/5' : 'hover:bg-bg'}
+									disabled:opacity-40"
+							>
+								<div class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
+									{isSelected ? 'border-navy bg-navy' : 'border-slate-300'}">
+									{#if isSelected}
+										<div class="w-1.5 h-1.5 rounded-full bg-white"></div>
+									{/if}
+								</div>
+								<span class="text-[12px] {isSelected ? 'text-slate-800 font-semibold' : 'text-slate-600'}">
+									{opt.label}
+								</span>
+								{#if savingType && isSelected}
+									<svg class="w-3 h-3 animate-spin-fast text-slate-400 ml-auto shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+										<path d="M21 12a9 9 0 11-6.219-8.56" />
+									</svg>
+								{/if}
+							</button>
+						{/each}
+					</div>
+				</div>
 			</div>
 	</LoginGate>
 </div>

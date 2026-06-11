@@ -3,7 +3,7 @@
 	import JsBarcode from 'jsbarcode';
 	import { invoke } from '@tauri-apps/api/core';
 	import { listArticulosEtiqueta } from '../lib/grpc.js';
-	import { getDefaultPrinter } from '../lib/dbf.js';
+	import { getDefaultPrinter, getPrinterType } from '../lib/dbf.js';
 	import type { ArticuloEtiqueta } from '../lib/types.js';
 
 	// ── Estado panel izquierdo ─────────────────────────────────
@@ -26,6 +26,7 @@
 	// ── Impresora ──────────────────────────────────────────────
 	let printers = $state<string[]>([]);
 	let printerName = $state('');
+	let printerType = $state('62mm');
 	let printerModal = $state<{ title: string; body: string } | null>(null);
 
 	// ── Búsqueda con debounce ──────────────────────────────────
@@ -35,9 +36,11 @@
 		Promise.all([
 			invoke<string[]>('list_printers'),
 			getDefaultPrinter(),
-		]).then(([list, saved]) => {
+			getPrinterType(),
+		]).then(([list, saved, savedType]) => {
 			printers = list;
 			printerName = saved ?? list[0] ?? '';
+			printerType = savedType ?? '62mm';
 		}).catch(() => {});
 	});
 
@@ -110,11 +113,12 @@
 	async function renderLabelToCanvas(
 		art: ArticuloEtiqueta,
 		barcodeSvg: string | null,
-		heightMm: number
+		heightMm: number,
+		widthMm: number
 	): Promise<string> {
 		const DPI = 96;
 		const SCALE = 4; // ~384 DPI efectivo — buena calidad al escalar a 300 DPI del driver
-		const W = Math.round((62 * DPI) / 25.4) * SCALE;
+		const W = Math.round((widthMm * DPI) / 25.4) * SCALE;
 		const H = Math.round((heightMm * DPI) / 25.4) * SCALE;
 		const pad = Math.round((3 * DPI) / 25.4) * SCALE;
 		const innerW = W - 2 * pad;
@@ -197,48 +201,56 @@
 			return { art, barcodeSvg };
 		});
 
-		// Medir altura real del layout en un iframe oculto
-		const baseCss = `* { box-sizing: border-box; margin: 0; padding: 0; }
-			.label-page { width: 62mm; padding: 3mm; font-family: monospace, sans-serif; }
-			.label-barcode { width: 100%; margin-bottom: 2mm; }
-			.label-barcode svg { width: 100%; height: auto; }
-			.label-numart { font-size: 14pt; font-weight: bold; font-family: Arial, sans-serif; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
-			.label-desc { font-size: 6pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
+		const paperWidthMm = printerType === '29mm' ? 29 : 62;
 
-		const firstItem = rendered[0];
-		const sampleDiv = `<div class="label-page">
-			${firstItem.barcodeSvg ? `<div class="label-barcode">${firstItem.barcodeSvg}</div>` : ''}
-			<div class="label-numart">${escapeHtml(firstItem.art.numart)}</div>
-			<div class="label-desc">${escapeHtml(firstItem.art.desc)}</div>
-		</div>`;
-		const measureHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${baseCss}</style></head><body>${sampleDiv}</body></html>`;
+		let heightMm: number;
+		if (printerType === '29mm') {
+			// Etiqueta de tamaño fijo: no se mide
+			heightMm = 90.3;
+		} else {
+			// Medir altura real del layout en un iframe oculto
+			const baseCss = `* { box-sizing: border-box; margin: 0; padding: 0; }
+				.label-page { width: ${paperWidthMm}mm; padding: 3mm; font-family: monospace, sans-serif; }
+				.label-barcode { width: 100%; margin-bottom: 2mm; }
+				.label-barcode svg { width: 100%; height: auto; }
+				.label-numart { font-size: 14pt; font-weight: bold; font-family: Arial, sans-serif; letter-spacing: 0.05em; margin-bottom: 1mm; text-align: center; }
+				.label-desc { font-size: 6pt; line-height: 1.3; font-family: "Arial Narrow", "Helvetica Neue", sans-serif; font-stretch: condensed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }`;
 
-		const iframe = document.createElement('iframe');
-		iframe.style.cssText = 'position:fixed;width:62mm;top:-9999px;left:0;border:0;visibility:hidden;';
-		document.body.appendChild(iframe);
+			const firstItem = rendered[0];
+			const sampleDiv = `<div class="label-page">
+				${firstItem.barcodeSvg ? `<div class="label-barcode">${firstItem.barcodeSvg}</div>` : ''}
+				<div class="label-numart">${escapeHtml(firstItem.art.numart)}</div>
+				<div class="label-desc">${escapeHtml(firstItem.art.desc)}</div>
+			</div>`;
+			const measureHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${baseCss}</style></head><body>${sampleDiv}</body></html>`;
 
-		const doc = iframe.contentDocument!;
-		doc.open();
-		doc.write(measureHtml);
-		doc.close();
+			const iframe = document.createElement('iframe');
+			iframe.style.cssText = `position:fixed;width:${paperWidthMm}mm;top:-9999px;left:0;border:0;visibility:hidden;`;
+			document.body.appendChild(iframe);
 
-		await new Promise<void>((r) => setTimeout(r, 80));
+			const doc = iframe.contentDocument!;
+			doc.open();
+			doc.write(measureHtml);
+			doc.close();
 
-		const labelEl = doc.querySelector('.label-page') as HTMLElement | null;
-		const heightPx = labelEl ? labelEl.offsetHeight : doc.body.scrollHeight;
-		const heightMm = Math.ceil(heightPx * 25.4 / 96);
+			await new Promise<void>((r) => setTimeout(r, 80));
 
-		document.body.removeChild(iframe);
+			const labelEl = doc.querySelector('.label-page') as HTMLElement | null;
+			const heightPx = labelEl ? labelEl.offsetHeight : doc.body.scrollHeight;
+			heightMm = Math.ceil(heightPx * 25.4 / 96);
+
+			document.body.removeChild(iframe);
+		}
 
 		// Renderizar cada etiqueta en canvas (calidad ~384 DPI) y enviar PNGs a Rust/GDI
 		const labels = await Promise.all(
 			rendered.map(({ art, barcodeSvg }) =>
-				renderLabelToCanvas(art, barcodeSvg, heightMm).then((b) => ({ png_b64: b }))
+				renderLabelToCanvas(art, barcodeSvg, heightMm, paperWidthMm).then((b) => ({ png_b64: b }))
 			)
 		);
 
 		try {
-			await invoke('print_etiquetas', { labels, heightMm, printerName });
+			await invoke('print_etiquetas', { labels, heightMm, printerName, paperWidthMm });
 			cola = [];
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);

@@ -19,6 +19,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub default_printer: Option<String>,
     #[serde(default)]
+    pub printer_type: Option<String>,
+    #[serde(default)]
     pub sucursales: Vec<SucursalConfig>,
 }
 
@@ -62,6 +64,7 @@ impl AppConfig {
                 api_key: key,
                 default_numalm: std::env::var("DEFAULT_NUMALM").ok(),
                 default_printer: None,
+                printer_type: None,
                 sucursales: vec![],
             });
         }
@@ -129,6 +132,7 @@ impl AppConfig {
         api_key: &str,
         default_numalm: Option<&str>,
         default_printer: Option<&str>,
+        printer_type: Option<&str>,
         sucursales: &[SucursalConfig],
     ) -> Result<()> {
         let config_path = Self::config_path()
@@ -154,6 +158,12 @@ impl AppConfig {
             if !dp.is_empty() {
                 let escaped = dp.replace('\\', "\\\\");
                 content.push_str(&format!("default_printer = \"{}\"\n", escaped));
+            }
+        }
+
+        if let Some(pt) = printer_type {
+            if !pt.is_empty() {
+                content.push_str(&format!("printer_type = \"{}\"\n", pt));
             }
         }
 
@@ -192,6 +202,8 @@ impl AppConfig {
             .and_then(|v| v.as_str()).map(|s| s.to_string());
         let default_printer = existing.get("default_printer")
             .and_then(|v| v.as_str()).map(|s| s.to_string());
+        let printer_type = existing.get("printer_type")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
 
         // Preservar dbf_path existente por numalm
         let existing_sucursales: Vec<SucursalConfig> = existing
@@ -229,6 +241,7 @@ impl AppConfig {
             &api_key,
             default_numalm.as_deref(),
             default_printer.as_deref(),
+            printer_type.as_deref(),
             &merged,
         )
     }
@@ -244,6 +257,8 @@ impl AppConfig {
         let default_numalm = existing.get("default_numalm")
             .and_then(|v| v.as_str()).map(|s| s.to_string());
         let default_printer = existing.get("default_printer")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
+        let printer_type = existing.get("printer_type")
             .and_then(|v| v.as_str()).map(|s| s.to_string());
 
         let mut sucursales: Vec<SucursalConfig> = existing
@@ -268,7 +283,7 @@ impl AppConfig {
             s.dbf_path = Some(path.to_string());
         }
 
-        Self::write_config(&grpc_endpoint, &api_key, default_numalm.as_deref(), default_printer.as_deref(), &sucursales)
+        Self::write_config(&grpc_endpoint, &api_key, default_numalm.as_deref(), default_printer.as_deref(), printer_type.as_deref(), &sucursales)
     }
 
     /// Actualiza el almacén predeterminado.
@@ -279,6 +294,76 @@ impl AppConfig {
             .and_then(|v| v.as_str()).unwrap_or("").to_string();
         let api_key = existing.get("api_key")
             .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_printer = existing.get("default_printer")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
+        let printer_type = existing.get("printer_type")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
+
+        let sucursales: Vec<SucursalConfig> = existing
+            .get("sucursales")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter().filter_map(|item| {
+                    let t = item.as_table()?;
+                    Some(SucursalConfig {
+                        numalm: t.get("numalm")?.as_str()?.trim().to_string(),
+                        letra: t.get("letra")?.as_str()?.trim().to_string(),
+                        dbf_path: t.get("dbf_path")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string()),
+                    })
+                }).collect()
+            })
+            .unwrap_or_default();
+
+        Self::write_config(&grpc_endpoint, &api_key, Some(numalm), default_printer.as_deref(), printer_type.as_deref(), &sucursales)
+    }
+
+    /// Actualiza la impresora predeterminada.
+    pub fn update_default_printer(printer: &str) -> Result<()> {
+        let existing = Self::load_table();
+
+        let grpc_endpoint = existing.get("grpc_endpoint")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let api_key = existing.get("api_key")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_numalm = existing.get("default_numalm")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
+        let printer_type = existing.get("printer_type")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
+
+        let sucursales: Vec<SucursalConfig> = existing
+            .get("sucursales")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter().filter_map(|item| {
+                    let t = item.as_table()?;
+                    Some(SucursalConfig {
+                        numalm: t.get("numalm")?.as_str()?.trim().to_string(),
+                        letra: t.get("letra")?.as_str()?.trim().to_string(),
+                        dbf_path: t.get("dbf_path")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string()),
+                    })
+                }).collect()
+            })
+            .unwrap_or_default();
+
+        Self::write_config(&grpc_endpoint, &api_key, default_numalm.as_deref(), Some(printer), printer_type.as_deref(), &sucursales)
+    }
+
+    /// Actualiza el tipo de formato de la impresora de etiquetas.
+    pub fn update_printer_type(t: &str) -> Result<()> {
+        let existing = Self::load_table();
+
+        let grpc_endpoint = existing.get("grpc_endpoint")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let api_key = existing.get("api_key")
+            .and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let default_numalm = existing.get("default_numalm")
+            .and_then(|v| v.as_str()).map(|s| s.to_string());
         let default_printer = existing.get("default_printer")
             .and_then(|v| v.as_str()).map(|s| s.to_string());
 
@@ -300,38 +385,6 @@ impl AppConfig {
             })
             .unwrap_or_default();
 
-        Self::write_config(&grpc_endpoint, &api_key, Some(numalm), default_printer.as_deref(), &sucursales)
-    }
-
-    /// Actualiza la impresora predeterminada.
-    pub fn update_default_printer(printer: &str) -> Result<()> {
-        let existing = Self::load_table();
-
-        let grpc_endpoint = existing.get("grpc_endpoint")
-            .and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let api_key = existing.get("api_key")
-            .and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let default_numalm = existing.get("default_numalm")
-            .and_then(|v| v.as_str()).map(|s| s.to_string());
-
-        let sucursales: Vec<SucursalConfig> = existing
-            .get("sucursales")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter().filter_map(|item| {
-                    let t = item.as_table()?;
-                    Some(SucursalConfig {
-                        numalm: t.get("numalm")?.as_str()?.trim().to_string(),
-                        letra: t.get("letra")?.as_str()?.trim().to_string(),
-                        dbf_path: t.get("dbf_path")
-                            .and_then(|v| v.as_str())
-                            .filter(|s| !s.is_empty())
-                            .map(|s| s.to_string()),
-                    })
-                }).collect()
-            })
-            .unwrap_or_default();
-
-        Self::write_config(&grpc_endpoint, &api_key, default_numalm.as_deref(), Some(printer), &sucursales)
+        Self::write_config(&grpc_endpoint, &api_key, default_numalm.as_deref(), default_printer.as_deref(), Some(t), &sucursales)
     }
 }

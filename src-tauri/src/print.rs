@@ -19,12 +19,13 @@ pub fn print_etiquetas(
     labels: Vec<PngLabel>,
     height_mm: f32,
     printer_name: String,
+    paper_width_mm: f32,
 ) -> Result<(), String> {
     if labels.is_empty() {
         return Ok(());
     }
     #[cfg(windows)]
-    return imp::print_labels(labels, height_mm, printer_name);
+    return imp::print_labels(labels, height_mm, printer_name, paper_width_mm);
     #[cfg(not(windows))]
     return Err("Impresión directa solo disponible en Windows".to_string());
 }
@@ -96,6 +97,7 @@ mod imp {
         labels: Vec<PngLabel>,
         height_mm: f32,
         printer_name: String,
+        paper_width_mm: f32,
     ) -> Result<(), String> {
         // Decodificar todo antes de abrir el DC (fail-fast)
         let pngs: Vec<Vec<u8>> = labels
@@ -111,9 +113,9 @@ mod imp {
         let printer_w: Vec<u16> = printer_name.encode_utf16().chain(Some(0)).collect();
         let pcw = PCWSTR::from_raw(printer_w.as_ptr());
 
-        // Dimensiones en décimas de mm: ancho del rollo (62 mm) y longitud de la etiqueta
-        let paper_w = 620_i16;                                 // 62 mm — ancho del rollo
-        let paper_h = (height_mm * 10.0).round() as i16;      // longitud variable
+        // Dimensiones en décimas de mm: ancho configurable y longitud de la etiqueta
+        let paper_w = (paper_width_mm * 10.0).round() as i16;
+        let paper_h = (height_mm * 10.0).round() as i16;
 
         let dm_buf = build_devmode(pcw, paper_w, paper_h)?;
 

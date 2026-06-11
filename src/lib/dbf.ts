@@ -194,3 +194,11 @@ export function getDefaultPrinter(): Promise<string | null> {
 export function saveDefaultPrinter(printer: string): Promise<void> {
 	return invoke('save_default_printer', { printer });
 }
+
+export function getPrinterType(): Promise<string | null> {
+	return invoke('get_printer_type');
+}
+
+export function savePrinterType(printerType: string): Promise<void> {
+	return invoke('save_printer_type', { printerType });
+}
