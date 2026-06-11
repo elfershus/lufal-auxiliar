@@ -35,7 +35,12 @@
 				// Sin conexión o error: continuar normalmente
 			}
 
-			const configured = await initClient();
+			let configured = false;
+			try {
+				configured = await initClient();
+			} catch {
+				// config inválido → mostrar SetupView
+			}
 			needsSetup = !configured;
 			if (configured) {
 				try {

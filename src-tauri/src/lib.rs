@@ -888,10 +888,13 @@ fn get_inventario_por_mes(
 async fn init_client(grpc: State<'_, GrpcState>) -> Result<bool, String> {
     match AppConfig::load() {
         Ok(config) => {
-            let client = GrpcClient::new(&config.grpc_endpoint, &config.api_key)
-                .map_err(|e| e.to_string())?;
-            *grpc.lock().await = Some(client);
-            Ok(true)
+            match GrpcClient::new(&config.grpc_endpoint, &config.api_key) {
+                Ok(client) => {
+                    *grpc.lock().await = Some(client);
+                    Ok(true)
+                }
+                Err(_) => Ok(false),
+            }
         }
         Err(_) => Ok(false),
     }
