@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { listAlmacenes } from '../lib/grpc.js';
 	import { getSucursalesConfig, saveSucursalDbfPath, saveDefaultNumalm, saveSucursalesMap, getDefaultPrinter, saveDefaultPrinter } from '../lib/dbf.js';
@@ -108,6 +109,8 @@
 			dbfError = e instanceof Error ? e.message : String(e);
 		}
 	}
+
+	onDestroy(() => auth.lock());
 </script>
 
 <div class="min-h-screen bg-bg">

@@ -582,6 +582,7 @@
 	}
 
 	onDestroy(() => {
+		auth.lock();
 		chartMes?.destroy();
 		chartVentasContado?.destroy();
 		chartGastos?.destroy();

@@ -1,6 +1,10 @@
 class AuthState {
 	unlocked = $state(false);
 
+	lock() {
+		this.unlocked = false;
+	}
+
 	unlock(password: string): boolean {
 		const now = new Date();
 		const parts = new Intl.DateTimeFormat('es-MX', {
