@@ -201,12 +201,12 @@
 			return { art, barcodeSvg };
 		});
 
-		const paperWidthMm = printerType === '29mm' ? 29 : 62;
+		const paperWidthMm = printerType === '29mm' ? 90 : 62;
 
 		let heightMm: number;
 		if (printerType === '29mm') {
 			// Etiqueta de tamaño fijo: no se mide
-			heightMm = 90.3;
+			heightMm = 29;
 		} else {
 			// Medir altura real del layout en un iframe oculto
 			const baseCss = `* { box-sizing: border-box; margin: 0; padding: 0; }
